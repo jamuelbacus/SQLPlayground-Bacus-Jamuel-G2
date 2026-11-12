@@ -1,0 +1,51 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}SQL Playground{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container nav-wrap">
+        <a class="brand" href="{% url 'home' %}">
+          <span class="brand-mark">&lt;/&gt;</span>
+          <span>SQL Playground</span>
+        </a>
+
+        <nav class="site-nav" aria-label="Main navigation">
+          {% if user.is_authenticated %}
+          <span class="nav-user">{{ user.display_name }}</span>
+          {% else %}
+          <a class="btn btn-primary btn-sm" href="{% url 'signup' %}"
+            >Sign up</a
+          >
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+
+    {% if messages %}
+    <div class="container message-stack" aria-live="polite">
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">
+        {{ message }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <main class="container page">{% block content %}{% endblock %}</main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          SQL Playground &middot; IT317 &middot; Cebu Institute of Technology
+          &ndash; University
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

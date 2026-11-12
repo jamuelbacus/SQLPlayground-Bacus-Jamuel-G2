@@ -1,0 +1,61 @@
+{% extends "base.html" %} {% block title %}SQL Playground | Learn SQL by Doing{%
+endblock %} {% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">IT317 &middot; Capstone Project</p>
+    <h1>Learn SQL by writing, running, and understanding queries.</h1>
+    <p class="lead">
+      SQL Playground is a web-based practice environment for IT students. Run
+      queries against sample databases, see real results, and get plain-language
+      feedback when a query is logically wrong.
+    </p>
+    <div class="hero-actions">
+      {% if user.is_authenticated %}
+      <p class="muted">
+        You are logged in as <strong>{{ user.display_name }}</strong>.
+      </p>
+      {% else %}
+      <a class="btn btn-primary" href="{% url 'signup' %}">Create an account</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="hero-card" aria-label="Example SQL query">
+    <p class="code-label">practice.sql</p>
+    <pre><code>SELECT student_name, course
+FROM students
+WHERE course = 'IT';
+
+-- 24 rows returned
+-- Tip: filtering grouped rows?
+-- Use HAVING, not WHERE.</code></pre>
+  </div>
+</section>
+
+<section class="feature-grid" aria-label="Planned features">
+  <article class="card">
+    <span class="feature-icon">01</span>
+    <h2>Write and run SQL</h2>
+    <p>
+      Practice real queries against predefined sample databases and see the
+      result table immediately.
+    </p>
+  </article>
+  <article class="card">
+    <span class="feature-icon">02</span>
+    <h2>Understand mistakes</h2>
+    <p>
+      Get plain-language feedback for common logical errors such as the wrong
+      JOIN or a misplaced filter.
+    </p>
+  </article>
+  <article class="card">
+    <span class="feature-icon">03</span>
+    <h2>Review your history</h2>
+    <p>
+      Keep track of previous queries and results so you can see how your SQL
+      skills improve over time.
+    </p>
+  </article>
+</section>
+{% endblock %}
