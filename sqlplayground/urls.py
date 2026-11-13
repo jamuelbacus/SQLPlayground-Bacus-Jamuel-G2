@@ -12,6 +12,7 @@ from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("", include("accounts.urls")),
 ]
 
 # Serve uploaded media (profile photos) during local development only.
