@@ -28,7 +28,7 @@ class SignUpTests(TestCase):
     def test_valid_signup_creates_learner_with_hashed_password(self):
         response = self.client.post(self.url, self.valid_data)
 
-        self.assertRedirects(response, reverse("home"))
+        self.assertRedirects(response, reverse("login"))
         user = User.objects.get(username="jamuel")
         self.assertEqual(user.role, User.Role.LEARNER)
         self.assertTrue(user.check_password("Str0ngPass!234"))
@@ -93,3 +93,45 @@ class SignUpTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertRedirects(response, reverse("home"))
+
+
+class LoginLogoutTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.login_url = reverse("login")
+
+    def test_login_page_loads(self):
+        response = self.client.get(self.login_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/login.html")
+
+    def test_valid_credentials_log_the_user_in(self):
+        response = self.client.post(
+            self.login_url,
+            {"username": "learner1", "password": "Str0ngPass!234"},
+        )
+
+        self.assertRedirects(response, reverse("home"))
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+
+    def test_invalid_credentials_show_an_error_message(self):
+        response = self.client.post(
+            self.login_url,
+            {"username": "learner1", "password": "wrong-password"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid username or password")
+
+    def test_logout_ends_the_session(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertRedirects(response, reverse("login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
