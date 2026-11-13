@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
 
 from .models import CustomUser
@@ -72,3 +72,20 @@ class SignUpForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+
+class AccountLoginForm(AuthenticationForm):
+    """Login form with a single, clear invalid-credentials message."""
+
+    error_messages = {
+        "invalid_login": (
+            "Invalid username or password. Please check your credentials "
+            "and try again."
+        ),
+        "inactive": "This account is inactive.",
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-input")
