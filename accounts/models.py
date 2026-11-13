@@ -2,8 +2,9 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
 
+
 class CustomUser(AbstractUser):
-    """Application user with a role and contact number."""
+    """Application user with a role, contact number, and profile photo."""
 
     class Role(models.TextChoices):
         LEARNER = "LEARNER", "Learner"
@@ -26,6 +27,12 @@ class CustomUser(AbstractUser):
                 message="Enter a valid contact number (7-15 digits, optional leading +).",
             )
         ],
+    )
+
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/",
+        blank=True,
+        null=True,
     )
 
     def save(self, *args, **kwargs):
