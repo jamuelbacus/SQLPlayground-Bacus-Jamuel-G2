@@ -1,9 +1,19 @@
+import shutil
+import tempfile
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 User = get_user_model()
 
+# A valid 1x1 transparent GIF, used to test profile photo uploads.
+GIF_1X1 = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
+    b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
+    b"\x00\x02\x02D\x01\x00;"
+)
 
 
 class SignUpTests(TestCase):
@@ -143,3 +153,102 @@ class LoginLogoutTests(TestCase):
 
         self.assertRedirects(response, reverse("login"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_profile_page_requires_login(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
+
+
+class ProfileTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+        self.user = User.objects.create_user(
+            username="jamuel",
+            email="jamuel@example.com",
+            password="Str0ngPass!234",
+            first_name="Jamuel",
+            last_name="Bacus",
+            contact_number="+639171234567",
+        )
+        self.other_user = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password="Str0ngPass!234",
+            first_name="Other",
+            last_name="Learner",
+        )
+        self.client.force_login(self.user)
+
+    def test_profile_shows_only_the_logged_in_users_information(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "jamuel@example.com")
+        self.assertNotContains(response, "other@example.com")
+
+    def test_profile_update_changes_only_the_logged_in_user(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "new-email@example.com",
+                "contact_number": "+639181234567",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.other_user.refresh_from_db()
+        self.assertEqual(self.user.email, "new-email@example.com")
+        self.assertEqual(self.user.contact_number, "+639181234567")
+        self.assertEqual(self.other_user.email, "other@example.com")
+
+    def test_profile_update_rejects_another_users_email(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "other@example.com",
+                "contact_number": "+639171234567",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("email", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "jamuel@example.com")
+
+    def test_profile_photo_can_be_uploaded(self):
+        photo = SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+                "profile_photo": photo,
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.profile_photo.name.endswith("avatar.gif"))
+
+    def test_profile_update_requires_login(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("profile_edit"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
