@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Create account | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="auth-layout">
+    <div class="card auth-card">
+      <p class="eyebrow">Get started</p>
+      <h1>Create your account</h1>
+      <p class="muted">
+        Registration creates a Learner account. Administrator accounts are
+        created by the project team.
+      </p>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% include "partials/form_fields.html" %}
+        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+      </form>
+    </div>
+  </section>
+{% endblock %}
