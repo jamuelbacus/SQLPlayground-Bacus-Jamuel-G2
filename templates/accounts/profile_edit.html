@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Edit profile | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Account</p>
+      <h1>Edit profile</h1>
+    </div>
+    <a class="btn btn-secondary" href="{% url 'profile' %}">Cancel</a>
+  </section>
+
+  <div class="card form-card">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% include "partials/form_fields.html" %}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <a class="btn btn-secondary" href="{% url 'profile' %}">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

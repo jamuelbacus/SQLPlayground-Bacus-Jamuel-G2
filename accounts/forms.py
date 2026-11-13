@@ -89,3 +89,34 @@ class AccountLoginForm(AuthenticationForm):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-input")
+
+
+class ProfileForm(forms.ModelForm):
+    """Form used by a logged-in user to update their own profile."""
+
+    class Meta:
+        model = CustomUser
+        fields = ("first_name", "last_name", "email", "contact_number", "profile_photo")
+        widgets = {
+            "first_name": forms.TextInput(attrs={"placeholder": "e.g. Jamuel"}),
+            "last_name": forms.TextInput(attrs={"placeholder": "e.g. Bacus"}),
+            "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+            "contact_number": forms.TextInput(attrs={"placeholder": "+639171234567"}),
+            "profile_photo": forms.ClearableFileInput(attrs={"accept": "image/*"}),
+        }
+        labels = {"profile_photo": "Profile photo"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["first_name"].required = True
+        self.fields["last_name"].required = True
+        for name, field in self.fields.items():
+            if name != "profile_photo":
+                field.widget.attrs.setdefault("class", "form-input")
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        duplicates = CustomUser.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise ValidationError("An account with this email address already exists.")
+        return email

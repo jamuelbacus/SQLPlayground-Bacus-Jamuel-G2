@@ -1,9 +1,10 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 
-from .forms import AccountLoginForm, SignUpForm
+from .forms import AccountLoginForm, ProfileForm, SignUpForm
 
 
 def home(request):
@@ -48,3 +49,25 @@ class AccountLogoutView(LogoutView):
     def post(self, request, *args, **kwargs):
         messages.success(request, "You have been logged out.")
         return super().post(request, *args, **kwargs)
+
+
+@login_required
+def profile(request):
+    """Show the logged-in user's own profile."""
+    return render(request, "accounts/profile.html")
+
+
+@login_required
+def profile_edit(request):
+    """Update the logged-in user's own profile."""
+    if request.method == "POST":
+        form = ProfileForm(request.POST, request.FILES, instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your profile was updated successfully.")
+            return redirect("profile")
+        messages.error(request, "Please correct the errors below.")
+    else:
+        form = ProfileForm(instance=request.user)
+
+    return render(request, "accounts/profile_edit.html", {"form": form})

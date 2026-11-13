@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}My profile | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Account</p>
+      <h1>My profile</h1>
+    </div>
+    <a class="btn btn-primary" href="{% url 'profile_edit' %}">Edit profile</a>
+  </section>
+
+  <div class="profile-grid">
+    <aside class="card profile-summary">
+      {% if user.profile_photo %}
+        <img
+          class="avatar avatar-lg"
+          src="{{ user.profile_photo.url }}"
+          alt="Profile photo of {{ user.username }}"
+        />
+      {% else %}
+        <div class="avatar avatar-lg avatar-placeholder" aria-hidden="true">
+          {{ user.username|first|upper }}
+        </div>
+      {% endif %}
+      <h2>{{ user.display_name }}</h2>
+      <p class="muted">@{{ user.username }}</p>
+      <span class="badge">{{ user.get_role_display }}</span>
+    </aside>
+
+    <section class="card">
+      <h2>Account details</h2>
+      <dl class="detail-list">
+        <div>
+          <dt>First name</dt>
+          <dd>{{ user.first_name|default:"&mdash;" }}</dd>
+        </div>
+        <div>
+          <dt>Last name</dt>
+          <dd>{{ user.last_name|default:"&mdash;" }}</dd>
+        </div>
+        <div>
+          <dt>Email address</dt>
+          <dd>{{ user.email }}</dd>
+        </div>
+        <div>
+          <dt>Contact number</dt>
+          <dd>{{ user.contact_number|default:"&mdash;" }}</dd>
+        </div>
+        <div>
+          <dt>Member since</dt>
+          <dd>{{ user.date_joined|date:"F j, Y" }}</dd>
+        </div>
+        <div>
+          <dt>Last login</dt>
+          <dd>{{ user.last_login|date:"F j, Y g:i A"|default:"&mdash;" }}</dd>
+        </div>
+      </dl>
+    </section>
+  </div>
+{% endblock %}
