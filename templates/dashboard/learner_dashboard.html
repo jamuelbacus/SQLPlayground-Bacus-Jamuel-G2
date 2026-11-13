@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Learner dashboard | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Learner dashboard</p>
+      <h1>Welcome back, {{ user.display_name }}.</h1>
+      <p class="muted">Practice SQL, review feedback, and keep track of your progress.</p>
+    </div>
+    <span class="badge badge-lg">{{ user.get_role_display }}</span>
+  </section>
+
+  <section class="stat-grid">
+    <article class="card stat-card">
+      <span class="stat-label">Saved queries</span>
+      <strong class="stat-value">0</strong>
+      <span class="muted">Query history arrives in Sprint 5.</span>
+    </article>
+    <article class="card stat-card">
+      <span class="stat-label">Practice exercises</span>
+      <strong class="stat-value">0</strong>
+      <span class="muted">Exercises arrive in Sprint 3.</span>
+    </article>
+    <article class="card stat-card">
+      <span class="stat-label">Sample databases</span>
+      <strong class="stat-value">3</strong>
+      <span class="muted">Planned for Sprint 3.</span>
+    </article>
+  </section>
+
+  <section class="content-grid">
+    <article class="card">
+      <h2>Your next steps</h2>
+      <ol class="step-list">
+        <li>Complete your profile so your instructor can identify your work.</li>
+        <li>Open the SQL editor and run a simple SELECT query.</li>
+        <li>Read the feedback panel when a query returns an unexpected result.</li>
+      </ol>
+    </article>
+
+    <article class="card">
+      <h2>Coming soon</h2>
+      <ul class="check-list">
+        <li>Query editor with result tables</li>
+        <li>Database structure viewer</li>
+        <li>Plain-language feedback for JOIN, filter, and aggregation errors</li>
+        <li>Saved query history</li>
+      </ul>
+    </article>
+  </section>
+{% endblock %}

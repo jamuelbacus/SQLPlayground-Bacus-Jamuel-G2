@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Administrator dashboard | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Administrator dashboard</p>
+      <h1>System overview</h1>
+      <p class="muted">Monitor registered accounts and manage the SQL Playground.</p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'admin:index' %}">Open Django admin</a>
+  </section>
+
+  <section class="stat-grid">
+    <article class="card stat-card">
+      <span class="stat-label">Total accounts</span>
+      <strong class="stat-value">{{ total_users }}</strong>
+    </article>
+    <article class="card stat-card">
+      <span class="stat-label">Learners</span>
+      <strong class="stat-value">{{ total_learners }}</strong>
+    </article>
+    <article class="card stat-card">
+      <span class="stat-label">Administrators</span>
+      <strong class="stat-value">{{ total_administrators }}</strong>
+    </article>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2>Recent registrations</h2>
+      <a class="text-link" href="{% url 'admin:accounts_customuser_changelist' %}">Manage users</a>
+    </div>
+    {% if recent_users %}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Username</th>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Role</th>
+              <th scope="col">Joined</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for account in recent_users %}
+              <tr>
+                <td>{{ account.username }}</td>
+                <td>{{ account.display_name }}</td>
+                <td>{{ account.email }}</td>
+                <td><span class="badge">{{ account.get_role_display }}</span></td>
+                <td>{{ account.date_joined|date:"M j, Y" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No accounts have been registered yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="content-grid">
+    <article class="card">
+      <h2>Administrator tools</h2>
+      <ul class="check-list">
+        <li>Create or deactivate user accounts in Django admin.</li>
+        <li>Promote a trusted account to Administrator when needed.</li>
+        <li>Review the account activity used in Sprint 5 testing.</li>
+      </ul>
+    </article>
+    <article class="card">
+      <h2>Role reminder</h2>
+      <p class="muted">
+        Learners can only open the learner dashboard. Administrator pages are
+        protected by a server-side role check, not just a hidden navigation link.
+      </p>
+    </article>
+  </section>
+{% endblock %}

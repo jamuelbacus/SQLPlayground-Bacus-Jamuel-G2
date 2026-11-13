@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Access denied | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="card empty-state">
+    <p class="eyebrow">403 &middot; Forbidden</p>
+    <h1>You do not have access to this page.</h1>
+    <p class="muted">
+      Your account role does not allow you to open this dashboard. Use the
+      dashboard that belongs to your role.
+    </p>
+    <a class="btn btn-primary" href="{% url 'dashboard' %}">Go to my dashboard</a>
+  </section>
+{% endblock %}
