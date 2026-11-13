@@ -92,7 +92,11 @@ class SignUpTests(TestCase):
 
         response = self.client.get(self.url)
 
-        self.assertRedirects(response, reverse("home"))
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
 
 
 class LoginLogoutTests(TestCase):
@@ -116,7 +120,11 @@ class LoginLogoutTests(TestCase):
             {"username": "learner1", "password": "Str0ngPass!234"},
         )
 
-        self.assertRedirects(response, reverse("home"))
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
 
     def test_invalid_credentials_show_an_error_message(self):
