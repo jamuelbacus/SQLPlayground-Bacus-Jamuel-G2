@@ -17,6 +17,10 @@
         {% include "partials/form_fields.html" %}
         <button type="submit" class="btn btn-primary btn-block">Create account</button>
       </form>
+
+      <p class="auth-switch">
+        Already registered? <a href="{% url 'login' %}">Log in</a>.
+      </p>
     </div>
   </section>
 {% endblock %}

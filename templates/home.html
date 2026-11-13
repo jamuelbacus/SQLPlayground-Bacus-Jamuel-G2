@@ -17,6 +17,7 @@
           <p class="muted">You are logged in as <strong>{{ user.display_name }}</strong>.</p>
         {% else %}
           <a class="btn btn-primary" href="{% url 'signup' %}">Create an account</a>
+          <a class="btn btn-secondary" href="{% url 'login' %}">Log in</a>
         {% endif %}
       </div>
     </div>
