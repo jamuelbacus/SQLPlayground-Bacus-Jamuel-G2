@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Log in | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="auth-layout">
+    <div class="card auth-card">
+      <p class="eyebrow">Welcome back</p>
+      <h1>Log in to SQL Playground</h1>
+      <p class="muted">Use the username and password you registered with.</p>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% include "partials/form_fields.html" %}
+        <button type="submit" class="btn btn-primary btn-block">Log in</button>
+      </form>
+
+      <p class="auth-switch">
+        New here? <a href="{% url 'signup' %}">Create an account</a>.
+      </p>
+    </div>
+  </section>
+{% endblock %}
