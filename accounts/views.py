@@ -14,7 +14,7 @@ def home(request):
 def signup(request):
     """Create a learner account, then ask the user to log in."""
     if request.user.is_authenticated:
-        return redirect("home")
+        return redirect("dashboard")
 
     if request.method == "POST":
         form = SignUpForm(request.POST)
