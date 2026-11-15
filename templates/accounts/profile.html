@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base_app.html" %}
 
 {% block title %}My profile | SQL Playground{% endblock %}
 
@@ -34,11 +34,11 @@
       <dl class="detail-list">
         <div>
           <dt>First name</dt>
-          <dd>{{ user.first_name|default:"&mdash;" }}</dd>
+          <dd>{{ user.first_name|default:"Not set" }}</dd>
         </div>
         <div>
           <dt>Last name</dt>
-          <dd>{{ user.last_name|default:"&mdash;" }}</dd>
+          <dd>{{ user.last_name|default:"Not set" }}</dd>
         </div>
         <div>
           <dt>Email address</dt>
@@ -46,7 +46,7 @@
         </div>
         <div>
           <dt>Contact number</dt>
-          <dd>{{ user.contact_number|default:"&mdash;" }}</dd>
+          <dd>{{ user.contact_number|default:"Not set" }}</dd>
         </div>
         <div>
           <dt>Member since</dt>
@@ -54,7 +54,7 @@
         </div>
         <div>
           <dt>Last login</dt>
-          <dd>{{ user.last_login|date:"F j, Y g:i A"|default:"&mdash;" }}</dd>
+          <dd>{{ user.last_login|date:"F j, Y g:i A"|default:"Not yet" }}</dd>
         </div>
       </dl>
     </section>
