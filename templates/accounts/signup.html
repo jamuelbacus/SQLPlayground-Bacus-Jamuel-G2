@@ -1,26 +1,65 @@
-{% extends "base.html" %}
+{% extends "base_auth.html" %}
 
 {% block title %}Create account | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="auth-layout">
-    <div class="card auth-card">
-      <p class="eyebrow">Get started</p>
-      <h1>Create your account</h1>
-      <p class="muted">
-        Registration creates a Learner account. Administrator accounts are
-        created by the project team.
-      </p>
+    <div class="auth-shell">
+      <div class="card auth-card">
+        <div class="auth-brand">
+          {% include "partials/brand.html" %}
+        </div>
 
-      <form method="post" novalidate>
-        {% csrf_token %}
-        {% include "partials/form_fields.html" %}
-        <button type="submit" class="btn btn-primary btn-block">Create account</button>
-      </form>
+        <h1>Create your account</h1>
+        <p class="auth-subtitle">Start with a free learner account.</p>
 
-      <p class="auth-switch">
-        Already registered? <a href="{% url 'login' %}">Log in</a>.
-      </p>
+        <form method="post" action="{% url 'signup' %}" class="auth-form" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-error" role="alert">
+              {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <fieldset class="name-group">
+            <legend class="form-legend">Full name</legend>
+            <div class="name-grid">
+              {% include "partials/field.html" with field=form.first_name %}
+              {% include "partials/field.html" with field=form.last_name %}
+            </div>
+          </fieldset>
+
+          {% include "partials/field.html" with field=form.username %}
+          {% include "partials/field.html" with field=form.email %}
+          {% include "partials/field.html" with field=form.contact_number %}
+          {% include "partials/field.html" with field=form.password1 show_rules=True hide_help=True %}
+          {% include "partials/field.html" with field=form.password2 show_match=True %}
+
+          <button type="submit" class="btn btn-primary btn-block btn-lg">Create account</button>
+        </form>
+
+        <div class="auth-divider" role="separator">
+          <span>or</span>
+        </div>
+
+        <button type="button" class="btn btn-google btn-block" disabled aria-disabled="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3Z" />
+            <path fill="#34A853" d="M12 22c2.7 0 4.9-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1a5.9 5.9 0 0 1-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z" />
+            <path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.8V7.6H3.1a10 10 0 0 0 0 9l3.3-2.6Z" />
+            <path fill="#EA4335" d="M12 6.1c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.6l3.3 2.6A5.9 5.9 0 0 1 12 6.1Z" />
+          </svg>
+          <span>Continue with Google</span>
+          <span class="soon-badge">Soon</span>
+        </button>
+
+        <p class="auth-switch">
+          Already have an account? <a href="{% url 'login' %}">Log in</a>
+        </p>
+      </div>
     </div>
   </section>
 {% endblock %}

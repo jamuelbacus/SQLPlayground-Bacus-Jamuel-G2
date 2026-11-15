@@ -1,0 +1,54 @@
+{% if field.field.widget.input_type == "checkbox" %}
+  <div class="form-group form-group--checkbox{% if field.errors %} has-error{% endif %}">
+    <label class="checkbox" for="{{ field.id_for_label }}">
+      {{ field }}
+      <span>{{ field.label }}</span>
+    </label>
+    {% if field.help_text %}
+      <div class="help-text" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</div>
+    {% endif %}
+    {% for error in field.errors %}
+      <p class="field-error">{{ error }}</p>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="form-group{% if field.errors %} has-error{% endif %}">
+    <label for="{{ field.id_for_label }}">
+      {{ field.label }}
+      {% if field.field.required %}<span class="required" aria-hidden="true">*</span>{% endif %}
+    </label>
+    {% if field.field.widget.input_type == "password" %}
+      <div class="password-wrap">
+        {{ field }}
+        <button
+          type="button"
+          class="password-toggle"
+          data-password-toggle
+          aria-label="Show password"
+          aria-pressed="false"
+        >
+          <svg class="password-icon password-icon--show" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7" />
+          </svg>
+          <svg class="password-icon password-icon--hide" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 3l18 18M10.6 6.1A9.7 9.7 0 0 1 12 6c6 0 9.5 6 9.5 6a17.6 17.6 0 0 1-3.4 3.9M6.4 7.6A17.4 17.4 0 0 0 2.5 12S6 18 12 18a9.8 9.8 0 0 0 3.9-.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    {% else %}
+      {{ field }}
+    {% endif %}
+    {% if field.help_text and not hide_help %}
+      <div class="help-text" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</div>
+    {% endif %}
+    {% if show_rules %}{% include "partials/password_rules.html" %}{% endif %}
+    {% if show_match %}
+      <p class="field-error" data-pw-match hidden>Passwords do not match.</p>
+    {% endif %}
+    {% for error in field.errors %}
+      <p class="field-error">{{ error }}</p>
+    {% endfor %}
+  </div>
+{% endif %}

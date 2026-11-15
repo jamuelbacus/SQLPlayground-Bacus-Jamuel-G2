@@ -1,54 +1,295 @@
-{% extends "base.html" %}
+{% extends "base_public.html" %}
 
-{% block title %}SQL Playground | Learn SQL by Doing{% endblock %}
+{% block title %}SQL Playground | Master SQL one query at a time{% endblock %}
+{% block body_class %}landing-page{% endblock %}
+{% block main_class %}landing-main{% endblock %}
 
 {% block content %}
-  <section class="hero">
-    <div class="hero-copy">
-      <p class="eyebrow">IT317 &middot; Capstone Project</p>
-      <h1>Learn SQL by writing, running, and understanding queries.</h1>
-      <p class="lead">
-        SQL Playground is a web-based practice environment for IT students. Run
-        queries against sample databases, see real results, and get
-        plain-language feedback when a query is logically wrong.
-      </p>
-      <div class="hero-actions">
-        {% if user.is_authenticated %}
-          <a class="btn btn-primary" href="{% url 'dashboard' %}">Go to my dashboard</a>
-        {% else %}
-          <a class="btn btn-primary" href="{% url 'signup' %}">Create an account</a>
-          <a class="btn btn-secondary" href="{% url 'login' %}">Log in</a>
-        {% endif %}
+  <section class="hero hero-landing">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <h1 class="hero-title">Master SQL one query at a time.</h1>
+        <p class="lead">
+          Practice real queries against sample databases, see results instantly,
+          and get clear feedback when something goes wrong.
+        </p>
+        <div class="hero-actions">
+          {% if user.is_authenticated %}
+            <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Start Practicing</a>
+          {% else %}
+            <a class="btn btn-primary btn-lg" href="{% url 'signup' %}">Start Practicing</a>
+          {% endif %}
+          <a class="btn btn-secondary btn-lg" href="#features">See how it works</a>
+        </div>
       </div>
-    </div>
 
-    <div class="hero-card" aria-label="Example SQL query">
-      <p class="code-label">practice.sql</p>
-      <pre><code>SELECT student_name, course
-FROM students
-WHERE course = 'IT';
+      <figure class="hero-preview" aria-label="Preview of the SQL Playground editor">
+        <div class="preview-window" data-preview>
+          <div class="preview-bar">
+            <span class="preview-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span class="preview-address">playground.sql</span>
+          </div>
 
--- 24 rows returned
--- Tip: filtering grouped rows?
--- Use HAVING, not WHERE.</code></pre>
+          <div class="preview-tabs">
+            <span class="preview-tab is-active">practice.sql</span>
+            <span class="preview-tab">results</span>
+            <button type="button" class="preview-run" data-preview-run>Run query</button>
+          </div>
+
+          <div class="preview-body">
+            <div class="preview-code">
+              <span class="code-line">
+                <span class="code-lineno">1</span>
+                <span><span class="code-keyword">SELECT</span> student_name, course, score</span>
+              </span>
+              <span class="code-line">
+                <span class="code-lineno">2</span>
+                <span><span class="code-keyword">FROM</span> students</span>
+              </span>
+              <span class="code-line">
+                <span class="code-lineno">3</span>
+                <span><span class="code-keyword">WHERE</span> course = <span class="code-string">'BSIT'</span></span>
+              </span>
+              <span class="code-line">
+                <span class="code-lineno">4</span>
+                <span><span class="code-keyword">ORDER BY</span> score <span class="code-keyword">DESC</span>;</span>
+              </span>
+            </div>
+
+            <p class="preview-empty" data-preview-empty>Run the query to see the results.</p>
+
+            <div class="preview-result" data-preview-result hidden>
+              <div class="preview-result-head">
+                <span>Results</span>
+                <span class="preview-count">24 rows returned</span>
+              </div>
+              <div class="preview-table">
+                <div class="preview-row preview-row-head">
+                  <span>student_name</span>
+                  <span>course</span>
+                  <span>score</span>
+                </div>
+                <div class="preview-row">
+                  <span>Ana Reyes</span>
+                  <span>BSIT</span>
+                  <span>94</span>
+                </div>
+                <div class="preview-row">
+                  <span>Lia Cruz</span>
+                  <span>BSIT</span>
+                  <span>91</span>
+                </div>
+                <div class="preview-row">
+                  <span>Miguel Santos</span>
+                  <span>BSIT</span>
+                  <span>88</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="preview-feedback" data-preview-feedback hidden>
+              <span class="feedback-icon" aria-hidden="true">i</span>
+              <div>
+                <strong>Feedback ready</strong>
+                <p>Filtering after a group? Use <span class="feedback-code">HAVING</span> instead of <span class="feedback-code">WHERE</span>.</p>
+              </div>
+            </div>
+          </div>
+          <p class="sr-only" role="status" data-preview-status></p>
+        </div>
+      </figure>
     </div>
   </section>
 
-  <section class="feature-grid" aria-label="Planned features">
-    <article class="card">
-      <span class="feature-icon">01</span>
-      <h2>Write and run SQL</h2>
-      <p>Practice real queries against predefined sample databases and see the result table immediately.</p>
-    </article>
-    <article class="card">
-      <span class="feature-icon">02</span>
-      <h2>Understand mistakes</h2>
-      <p>Get plain-language feedback for common logical errors such as the wrong JOIN or a misplaced filter.</p>
-    </article>
-    <article class="card">
-      <span class="feature-icon">03</span>
-      <h2>Review your history</h2>
-      <p>Keep track of previous queries and results so you can see how your SQL skills improve over time.</p>
-    </article>
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Everything you need to get better at SQL.</h2>
+      </div>
+
+      <div class="feature-grid reveal">
+        <article class="feature-card">
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M8 7l-4 5 4 5M16 7l4 5-4 5M13 5l-2 14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <h3>Write and run queries</h3>
+          <p>
+            Type real SQL against sample databases and see the result table
+            update in the same screen.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 21a9 9 0 1 0-9-9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              <path d="M12 8v4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              <circle cx="12" cy="16" r="1" fill="currentColor" />
+              <path d="M3 3v4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <h3>Understand your mistakes</h3>
+          <p>
+            Get plain-language feedback for common errors such as a misplaced
+            filter or the wrong join.
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <h3>Review your progress</h3>
+          <p>
+            Keep a history of past queries so you can see how your thinking
+            improves over time.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-about" id="about" aria-labelledby="about-title">
+    <div class="container about-grid">
+      <div class="about-copy reveal">
+        <p class="eyebrow">About</p>
+        <h2 id="about-title">Built for the way students actually learn.</h2>
+        <p>
+          SQL is easier to understand when you can see what a query does. SQL
+          Playground gives you a place to experiment, make mistakes, and read a
+          clear explanation without setting up a database on your own machine.
+        </p>
+      </div>
+
+      <ul class="about-points reveal">
+        <li class="about-point">
+          <span class="about-point-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="4" width="18" height="16" rx="2.5" stroke="currentColor" stroke-width="1.8" />
+              <path d="M3 9h18M9 9v11" stroke="currentColor" stroke-width="1.8" />
+            </svg>
+          </span>
+          <div>
+            <strong>Role-based dashboards</strong>
+            <p>Learners and administrators see the tools that match their role.</p>
+          </div>
+        </li>
+        <li class="about-point">
+          <span class="about-point-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l7 3v5c0 4.4-3 8.2-7 10-4-1.8-7-5.6-7-10V6l7-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <div>
+            <strong>Secure accounts</strong>
+            <p>Passwords are hashed, and profile data stays with its owner.</p>
+          </div>
+        </li>
+        <li class="about-point">
+          <span class="about-point-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-4.6A8.4 8.4 0 1 1 21 11.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M8 11h8M8 14.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </span>
+          <div>
+            <strong>Clear query feedback</strong>
+            <p>Explanations focus on the idea behind the error, not just the syntax.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section-faq" id="faq" aria-labelledby="faq-title">
+    <div class="container faq-layout">
+      <div class="section-head reveal">
+        <p class="eyebrow">FAQ</p>
+        <h2 id="faq-title">Questions students ask before starting.</h2>
+      </div>
+
+      <div class="faq-list reveal">
+        <details class="faq-item">
+          <summary>
+            Do I need to install anything?
+            <span class="faq-marker" aria-hidden="true"></span>
+          </summary>
+          <p class="faq-answer">
+            No. SQL Playground runs in your browser. You only need an account and
+            an internet connection.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>
+            Is it free for students?
+            <span class="faq-marker" aria-hidden="true"></span>
+          </summary>
+          <p class="faq-answer">
+            Yes. Creating a learner account is free. The project is built for
+            classroom practice.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>
+            What can I practice?
+            <span class="faq-marker" aria-hidden="true"></span>
+          </summary>
+          <p class="faq-answer">
+            Start with SELECT, filtering, sorting, and joins against sample
+            databases. More lessons will follow as the workspace grows.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>
+            Can I use it on my phone?
+            <span class="faq-marker" aria-hidden="true"></span>
+          </summary>
+          <p class="faq-answer">
+            You can read and review pages on a phone. Writing longer queries is
+            more comfortable on a tablet or laptop.
+          </p>
+        </details>
+
+        <details class="faq-item">
+          <summary>
+            How do I get an account?
+            <span class="faq-marker" aria-hidden="true"></span>
+          </summary>
+          <p class="faq-answer">
+            Choose Create account, fill in your details, and sign in with your
+            username or email address.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <div class="container">
+      <div class="cta-panel reveal">
+        <div>
+          <h2>Ready to write your first query?</h2>
+          <p>Create a free learner account and start with the sample databases.</p>
+        </div>
+        {% if user.is_authenticated %}
+          <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">Start Practicing</a>
+        {% else %}
+          <a class="btn btn-primary btn-lg" href="{% url 'signup' %}">Start Practicing</a>
+        {% endif %}
+      </div>
+    </div>
   </section>
 {% endblock %}
