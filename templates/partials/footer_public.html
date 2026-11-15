@@ -1,0 +1,35 @@
+<footer class="site-footer footer-public">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      {% include "partials/brand.html" %}
+      <p>
+        A practice environment for IT students to write SQL, run queries, and
+        understand what the results mean.
+      </p>
+    </div>
+
+    <nav class="footer-col" aria-label="Product">
+      <h2>Product</h2>
+      <a href="{% url 'home' %}#features">Features</a>
+      <a href="{% url 'home' %}#about">About</a>
+      <a href="{% url 'home' %}#faq">FAQ</a>
+    </nav>
+
+    <nav class="footer-col" aria-label="Account">
+      <h2>Account</h2>
+      {% if user.is_authenticated %}
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <a href="{% url 'profile' %}">Profile</a>
+        <a href="{% url 'profile_edit' %}">Edit profile</a>
+      {% else %}
+        <a href="{% url 'login' %}">Log in</a>
+        <a href="{% url 'signup' %}">Create account</a>
+      {% endif %}
+    </nav>
+  </div>
+
+  <div class="container footer-base">
+    <p>Practice SQL in your browser.</p>
+    <p>&copy; {% now "Y" %} SQL Playground</p>
+  </div>
+</footer>
