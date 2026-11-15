@@ -161,6 +161,106 @@ class LoginLogoutTests(TestCase):
         self.assertTrue(response.url.startswith(reverse("login")))
 
 
+    def test_login_accepts_email_address(self):
+        response = self.client.post(
+            self.login_url,
+            {"username": "learner1@example.com", "password": "Str0ngPass!234"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+
+    def test_login_accepts_email_case_insensitively(self):
+        response = self.client.post(
+            self.login_url,
+            {"username": "Learner1@Example.com", "password": "Str0ngPass!234"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+
+    def test_login_prefers_exact_username_over_email_match(self):
+        username_owner = User.objects.create_user(
+            username="shared@example.com",
+            email="username-owner@example.com",
+            password="Str0ngPass!234",
+        )
+        User.objects.create_user(
+            username="email-owner",
+            email="shared@example.com",
+            password="DifferentPass!234",
+        )
+
+        response = self.client.post(
+            self.login_url,
+            {"username": "shared@example.com", "password": "Str0ngPass!234"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(int(self.client.session["_auth_user_id"]), username_owner.pk)
+
+    def test_login_rejects_ambiguous_email_match(self):
+        User.objects.create_user(
+            username="case-a",
+            email="Case@example.com",
+            password="Str0ngPass!234",
+        )
+        User.objects.create_user(
+            username="case-b",
+            email="case@example.com",
+            password="DifferentPass!234",
+        )
+
+        response = self.client.post(
+            self.login_url,
+            {"username": "case@example.com", "password": "Str0ngPass!234"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertContains(response, "Invalid username or password")
+
+    def test_remember_me_unchecked_expires_at_browser_close(self):
+        self.client.post(
+            self.login_url,
+            {"username": "learner1", "password": "Str0ngPass!234"},
+        )
+
+        self.assertTrue(self.client.session.get_expire_at_browser_close())
+
+    def test_remember_me_checked_expires_in_30_days(self):
+        self.client.post(
+            self.login_url,
+            {
+                "username": "learner1",
+                "password": "Str0ngPass!234",
+                "remember_me": "on",
+            },
+        )
+
+        self.assertGreater(
+            self.client.session.get_expiry_age(),
+            60 * 60 * 24 * 29,
+        )
+
+    def test_login_form_uses_username_or_email_label(self):
+        response = self.client.get(self.login_url)
+
+        self.assertContains(response, "Username or email")
+
+
 class ProfileTests(TestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp()

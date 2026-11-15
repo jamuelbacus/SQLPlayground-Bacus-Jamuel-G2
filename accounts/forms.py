@@ -16,21 +16,35 @@ class SignUpForm(UserCreationForm):
     first_name = forms.CharField(
         max_length=150,
         required=True,
-        widget=forms.TextInput(attrs={"placeholder": "e.g. Jamuel"}),
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "First name",
+                "autocomplete": "given-name",
+                "autofocus": True,
+            }
+        ),
     )
     last_name = forms.CharField(
         max_length=150,
         required=True,
-        widget=forms.TextInput(attrs={"placeholder": "e.g. Bacus"}),
+        widget=forms.TextInput(
+            attrs={"placeholder": "Last name", "autocomplete": "family-name"}
+        ),
     )
     email = forms.EmailField(
+        label="Email address",
         required=True,
-        widget=forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+        widget=forms.EmailInput(
+            attrs={"placeholder": "you@example.com", "autocomplete": "email"}
+        ),
     )
     contact_number = forms.CharField(
         max_length=20,
         required=False,
-        widget=forms.TextInput(attrs={"placeholder": "+639171234567"}),
+        label="Contact number (optional)",
+        widget=forms.TextInput(
+            attrs={"placeholder": "Phone number", "autocomplete": "tel"}
+        ),
     )
 
     class Meta:
@@ -47,8 +61,22 @@ class SignUpForm(UserCreationForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        username = self.fields["username"]
+        username.widget.attrs.update(
+            {"autocomplete": "username", "placeholder": "Choose a username"}
+        )
+        username.widget.attrs.pop("autofocus", None)
+        username.help_text = (
+            "Choose a username you can use to log in. Letters, digits and "
+            "@/./+/-/_ only."
+        )
+        self.fields["password1"].widget.attrs["autocomplete"] = "new-password"
+        self.fields["password1"].widget.attrs["aria-describedby"] = "password-rules"
+        self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
+        self.fields["password2"].label = "Confirm password"
         for field in self.fields.values():
-            field.widget.attrs.setdefault("class", "form-input")
+            if field.widget.input_type != "checkbox":
+                field.widget.attrs.setdefault("class", "form-input")
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
@@ -84,11 +112,34 @@ class AccountLoginForm(AuthenticationForm):
         ),
         "inactive": "This account is inactive.",
     }
+    remember_me = forms.BooleanField(
+        required=False,
+        label="Remember me",
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["username"].label = "Username or email"
+        self.fields["username"].widget.attrs.update(
+            {
+                "autocomplete": "username",
+                "placeholder": "Username or email address",
+            }
+        )
+        self.fields["password"].widget.attrs["autocomplete"] = "current-password"
         for field in self.fields.values():
-            field.widget.attrs.setdefault("class", "form-input")
+            if field.widget.input_type != "checkbox":
+                field.widget.attrs.setdefault("class", "form-input")
+
+    def clean(self):
+        identifier = self.cleaned_data.get("username")
+        if identifier:
+            is_username = CustomUser.objects.filter(username=identifier).exists()
+            if not is_username:
+                matches = CustomUser.objects.filter(email__iexact=identifier)
+                if matches.count() == 1:
+                    self.cleaned_data["username"] = matches.first().username
+        return super().clean()
 
 
 class ProfileForm(forms.ModelForm):
@@ -98,10 +149,10 @@ class ProfileForm(forms.ModelForm):
         model = CustomUser
         fields = ("first_name", "last_name", "email", "contact_number", "profile_photo")
         widgets = {
-            "first_name": forms.TextInput(attrs={"placeholder": "e.g. Jamuel"}),
-            "last_name": forms.TextInput(attrs={"placeholder": "e.g. Bacus"}),
+            "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
+            "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
-            "contact_number": forms.TextInput(attrs={"placeholder": "+639171234567"}),
+            "contact_number": forms.TextInput(attrs={"placeholder": "Phone number"}),
             "profile_photo": forms.ClearableFileInput(attrs={"accept": "image/*"}),
         }
         labels = {"profile_photo": "Profile photo"}
