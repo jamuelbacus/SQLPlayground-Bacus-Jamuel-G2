@@ -5,36 +5,44 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}SQL Playground{% endblock %}</title>
+    <link rel="icon" href="{% static 'img/favicon.ico' %}?v=20261114-2" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}?v=20261114-2" />
+    <meta name="theme-color" content="#1F6BFF" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        try {
+          stored = window.localStorage.getItem("sqlp-theme");
+        } catch (error) {
+          stored = null;
+        }
+        var prefersDark =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var theme =
+          stored === "dark" || stored === "light"
+            ? stored
+            : prefersDark
+              ? "dark"
+              : "light";
+        root.setAttribute("data-theme", theme);
+        root.classList.add("js");
+      })();
+    </script>
     <link rel="stylesheet" href="{% static 'css/style.css' %}" />
   </head>
-  <body>
-    <header class="site-header">
-      <div class="container nav-wrap">
-        <a class="brand" href="{% url 'home' %}">
-          <span class="brand-mark">&lt;/&gt;</span>
-          <span>SQL Playground</span>
-        </a>
+  <body class="{% block body_class %}{% endblock %}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
 
-        <nav class="site-nav" aria-label="Main navigation">
-          {% if user.is_authenticated %}
-            {% if user.is_administrator %}
-              <a href="{% url 'administrator_dashboard' %}">Admin dashboard</a>
-            {% else %}
-              <a href="{% url 'learner_dashboard' %}">My dashboard</a>
-            {% endif %}
-            <a href="{% url 'profile' %}">Profile</a>
-            <span class="nav-user">{{ user.display_name }}</span>
-            <form method="post" action="{% url 'logout' %}" class="inline-form">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-ghost btn-sm">Log out</button>
-            </form>
-          {% else %}
-            <a href="{% url 'login' %}">Log in</a>
-            <a class="btn btn-primary btn-sm" href="{% url 'signup' %}">Sign up</a>
-          {% endif %}
-        </nav>
-      </div>
-    </header>
+    {% block header %}{% include "partials/header_app.html" %}{% endblock %}
 
     {% if messages %}
       <div class="container message-stack" aria-live="polite">
@@ -46,14 +54,12 @@
       </div>
     {% endif %}
 
-    <main class="container page">
+    <main id="main-content" class="{% block main_class %}container page{% endblock %}">
       {% block content %}{% endblock %}
     </main>
 
-    <footer class="site-footer">
-      <div class="container">
-        <p>SQL Playground &middot; IT317 &middot; Cebu Institute of Technology &ndash; University</p>
-      </div>
-    </footer>
+    {% block footer %}{% include "partials/footer_compact.html" %}{% endblock %}
+
+    <script src="{% static 'js/site.js' %}" defer></script>
   </body>
 </html>
