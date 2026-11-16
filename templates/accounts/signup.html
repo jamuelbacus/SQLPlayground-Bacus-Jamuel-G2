@@ -1,6 +1,6 @@
 {% extends "base_auth.html" %}
 
-{% block title %}Create account | SQL Playground{% endblock %}
+{% block title %}Create Account | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="auth-layout">
@@ -10,7 +10,7 @@
           {% include "partials/brand.html" %}
         </div>
 
-        <h1>Create your account</h1>
+        <h1>Create Your Account</h1>
         <p class="auth-subtitle">Start with a free learner account.</p>
 
         <form method="post" action="{% url 'signup' %}" class="auth-form" novalidate>
@@ -25,7 +25,7 @@
           {% endif %}
 
           <fieldset class="name-group">
-            <legend class="form-legend">Full name</legend>
+            <legend class="form-legend">Full Name</legend>
             <div class="name-grid">
               {% include "partials/field.html" with field=form.first_name %}
               {% include "partials/field.html" with field=form.last_name %}
@@ -34,7 +34,6 @@
 
           {% include "partials/field.html" with field=form.username %}
           {% include "partials/field.html" with field=form.email %}
-          {% include "partials/field.html" with field=form.contact_number %}
           {% include "partials/field.html" with field=form.password1 show_rules=True hide_help=True %}
           {% include "partials/field.html" with field=form.password2 show_match=True %}
 

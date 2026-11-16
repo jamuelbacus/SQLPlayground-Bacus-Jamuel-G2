@@ -22,7 +22,6 @@ def learner_dashboard(request):
 def administrator_dashboard(request):
     users = CustomUser.objects.order_by("-date_joined")
     context = {
-        "total_users": users.count(),
         "total_learners": users.filter(role=CustomUser.Role.LEARNER).count(),
         "total_administrators": users.filter(role=CustomUser.Role.ADMINISTRATOR).count(),
         "recent_users": users[:5],

@@ -1,54 +1,33 @@
 {% extends "base_app.html" %}
 
-{% block title %}Learner dashboard | SQL Playground{% endblock %}
+{% block title %}Learner Dashboard | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="page-head">
     <div>
-      <p class="eyebrow">Learner dashboard</p>
-      <h1>Welcome back, {{ user.display_name }}.</h1>
-      <p class="muted">Practice SQL, review feedback, and keep track of your progress.</p>
+      <h1>Learner Dashboard</h1>
+      <p class="muted">
+        Welcome back, {{ user.display_name }}. Practice SQL, review feedback,
+        and keep track of your progress.
+      </p>
     </div>
-    <span class="badge badge-lg">{{ user.get_role_display }}</span>
   </section>
 
   <section class="stat-grid">
     <article class="card stat-card">
-      <span class="stat-label">Saved queries</span>
+      <span class="stat-label">Saved Queries</span>
       <strong class="stat-value">0</strong>
       <span class="muted">Every query you run is saved to your history.</span>
     </article>
     <article class="card stat-card">
-      <span class="stat-label">Practice exercises</span>
+      <span class="stat-label">Practice Exercises</span>
       <strong class="stat-value">0</strong>
       <span class="muted">Guided exercises from your course.</span>
     </article>
     <article class="card stat-card">
-      <span class="stat-label">Sample databases</span>
+      <span class="stat-label">Sample Databases</span>
       <strong class="stat-value">3</strong>
       <span class="muted">Ready for practice.</span>
-    </article>
-  </section>
-
-  <section class="content-grid">
-    <article class="card">
-      <h2>Your next steps</h2>
-      <ol class="step-list">
-        <li>Complete your profile so your instructor can identify your work.</li>
-        <li>Open the SQL editor and run a simple SELECT query.</li>
-        <li>Read the feedback panel when a query returns an unexpected result.</li>
-      </ol>
-      <a class="btn btn-secondary" href="{% url 'profile' %}">Review my profile</a>
-    </article>
-
-    <article class="card">
-      <h2>Coming soon</h2>
-      <ul class="check-list">
-        <li>Query editor with result tables</li>
-        <li>Database structure viewer</li>
-        <li>Plain-language feedback for JOIN, filter, and aggregation errors</li>
-        <li>Saved query history</li>
-      </ul>
     </article>
   </section>
 {% endblock %}

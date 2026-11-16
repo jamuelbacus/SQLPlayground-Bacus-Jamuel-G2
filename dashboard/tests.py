@@ -105,10 +105,14 @@ class AdministratorDashboardContentTests(TestCase):
         )
         self.client.force_login(self.administrator)
 
-    def test_dashboard_shows_account_totals(self):
+    def test_dashboard_shows_active_account_totals(self):
         response = self.client.get(reverse("administrator_dashboard"))
 
-        self.assertEqual(response.context["total_users"], 2)
         self.assertEqual(response.context["total_learners"], 1)
         self.assertEqual(response.context["total_administrators"], 1)
-        self.assertContains(response, "Recent registrations")
+        self.assertNotIn("total_users", response.context)
+        self.assertContains(response, "Recent Registrations")
+        self.assertNotContains(response, "Total accounts")
+        self.assertNotContains(response, "Administrator tools")
+        self.assertNotContains(response, "Role reminder")
+

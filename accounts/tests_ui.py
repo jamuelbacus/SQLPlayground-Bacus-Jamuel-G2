@@ -78,6 +78,7 @@ class PublicChromeTests(TestCase):
         self.assertNotContains(response, "IT317")
         self.assertNotContains(response, "Cebu Institute")
         self.assertNotContains(response, "Sample databases, query feedback")
+        self.assertNotContains(response, "Browser-based, student-focused")
 
 
 class AuthScreenTests(TestCase):
@@ -85,7 +86,7 @@ class AuthScreenTests(TestCase):
         response = self.client.get(reverse("login"))
 
         for text in (
-            "Welcome back.",
+            "Welcome Back.",
             "Username or email",
             "Remember me",
             "Forgot password?",
@@ -100,26 +101,25 @@ class AuthScreenTests(TestCase):
         response = self.client.get(reverse("signup"))
 
         for text in (
-            "Create your account",
-            "Full name",
+            "Create Your Account",
+            "Full Name",
             "First name",
             "Last name",
             "Username",
             "Email address",
-            "Contact number",
             "Create account",
             "Continue with Google",
             "Log in",
         ):
             self.assertContains(response, text)
         self.assertContains(response, "data-password-toggle")
+        self.assertNotContains(response, "Contact number")
 
     def test_signup_placeholders_are_generic(self):
         response = self.client.get(reverse("signup"))
 
         self.assertContains(response, 'placeholder="First name"')
         self.assertContains(response, 'placeholder="Last name"')
-        self.assertContains(response, 'placeholder="Phone number"')
         self.assertContains(response, 'placeholder="Choose a username"')
         self.assertNotContains(response, "Jamuel")
         self.assertNotContains(response, "Bacus")
@@ -159,3 +159,4 @@ class AppChromeTests(TestCase):
 
         self.assertContains(response, "data-app-header")
         self.assertContains(response, "Log out")
+        self.assertNotContains(response, "Contact number")

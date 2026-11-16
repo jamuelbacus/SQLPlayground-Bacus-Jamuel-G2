@@ -949,8 +949,13 @@ samp {
   text-decoration: underline;
 }
 
-.form-card {
+.form-page {
   width: min(720px, 100%);
+  margin-inline: auto;
+}
+
+.form-card {
+  width: 100%;
 }
 
 .form-group {
@@ -1034,16 +1039,11 @@ samp {
   text-transform: uppercase;
 }
 
-.badge-lg {
-  font-size: 0.85rem;
-  padding: 0.4rem 0.9rem;
-}
-
 /* Dashboard */
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -1067,53 +1067,22 @@ samp {
   line-height: 1.1;
 }
 
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.step-list,
-.check-list {
-  color: var(--muted);
-  margin: 0 0 1.1rem;
-  padding-left: 1.2rem;
-}
-
-.step-list li,
-.check-list li {
-  margin-bottom: 0.45rem;
-}
-
-.check-list {
-  list-style: none;
-  padding-left: 0;
-}
-
-.check-list li {
-  padding-left: 1.4rem;
-  position: relative;
-}
-
-.check-list li::before {
-  content: "\2713";
-  color: var(--primary);
-  font-weight: 800;
-  position: absolute;
-  left: 0;
-}
-
 /* Profile */
 
 .profile-grid {
   display: grid;
-  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
+  width: min(1080px, 100%);
+  margin-inline: auto;
 }
 
 .profile-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
@@ -1334,7 +1303,6 @@ samp {
   grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
   align-items: center;
   gap: clamp(2rem, 5vw, 4rem);
-  min-height: 520px;
 }
 
 .hero-title {
@@ -1351,33 +1319,14 @@ samp {
   font-size: 1.12rem;
 }
 
-.hero-note {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--muted);
-  font-size: 0.86rem;
-  margin: 1.15rem 0 0;
-}
-
-.hero-note::before {
-  content: "\2713";
-  display: inline-grid;
-  place-items: center;
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 50%;
-  background: var(--success-bg);
-  color: var(--success);
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
 /* Product preview */
 
 .hero-preview {
   position: relative;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .preview-window {
@@ -2021,7 +1970,6 @@ samp {
   }
 
   .stat-grid,
-  .content-grid,
   .profile-grid {
     grid-template-columns: 1fr;
   }
