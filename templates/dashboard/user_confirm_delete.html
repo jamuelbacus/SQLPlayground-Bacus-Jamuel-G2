@@ -1,0 +1,29 @@
+{% extends "base_app.html" %}
+
+{% block title %}Delete User | SQL Playground{% endblock %}
+
+{% block content %}
+  <div class="form-page">
+    <section class="page-head">
+      <div>
+        <h1>Delete User</h1>
+      </div>
+      <a class="btn btn-secondary" href="{% url 'manage_users' %}">Cancel</a>
+    </section>
+
+    <div class="card form-card">
+      <p>
+        Delete <strong>{{ target.username }}</strong>
+        ({{ target.email }})? This permanently removes the account and cannot be
+        undone.
+      </p>
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+          <button type="submit" class="btn btn-danger">Delete User</button>
+          <a class="btn btn-secondary" href="{% url 'manage_users' %}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

@@ -499,6 +499,19 @@ samp {
   color: var(--primary);
 }
 
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  filter: brightness(0.94);
+}
+
 .btn-ghost {
   background: transparent;
   border-color: transparent;
@@ -1065,6 +1078,67 @@ samp {
 .stat-value {
   font-size: 2.1rem;
   line-height: 1.1;
+}
+
+/* User management */
+
+.filter-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.filter-field label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.filter-field .form-input {
+  min-width: 12rem;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.pagination a,
+.pagination span {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.38rem 0.7rem;
+  text-decoration: none;
+}
+
+.pagination .is-current {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 
 /* Profile */
