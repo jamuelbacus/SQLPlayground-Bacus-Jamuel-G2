@@ -24,7 +24,6 @@ class SignUpTests(TestCase):
             "last_name": "Bacus",
             "username": "jamuel",
             "email": "jamuel@example.com",
-            "contact_number": "+639171234567",
             "password1": "Str0ngPass!234",
             "password2": "Str0ngPass!234",
         }
@@ -275,7 +274,6 @@ class ProfileTests(TestCase):
             password="Str0ngPass!234",
             first_name="Jamuel",
             last_name="Bacus",
-            contact_number="+639171234567",
         )
         self.other_user = User.objects.create_user(
             username="other",
@@ -300,7 +298,6 @@ class ProfileTests(TestCase):
                 "first_name": "Jamuel",
                 "last_name": "Bacus",
                 "email": "new-email@example.com",
-                "contact_number": "+639181234567",
             },
         )
 
@@ -308,7 +305,6 @@ class ProfileTests(TestCase):
         self.user.refresh_from_db()
         self.other_user.refresh_from_db()
         self.assertEqual(self.user.email, "new-email@example.com")
-        self.assertEqual(self.user.contact_number, "+639181234567")
         self.assertEqual(self.other_user.email, "other@example.com")
 
     def test_profile_update_rejects_another_users_email(self):
@@ -318,7 +314,6 @@ class ProfileTests(TestCase):
                 "first_name": "Jamuel",
                 "last_name": "Bacus",
                 "email": "other@example.com",
-                "contact_number": "+639171234567",
             },
         )
 
@@ -336,7 +331,6 @@ class ProfileTests(TestCase):
                 "first_name": "Jamuel",
                 "last_name": "Bacus",
                 "email": "jamuel@example.com",
-                "contact_number": "+639171234567",
                 "profile_photo": photo,
             },
         )
