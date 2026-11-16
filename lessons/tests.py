@@ -1,7 +1,10 @@
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError
+from django.test import SimpleTestCase, TestCase
 
+from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
     MAX_ROWS,
     QueryError,
@@ -10,6 +13,9 @@ from .engine import (
     run_query,
     schema_tables,
 )
+from .models import LessonProgress
+
+User = get_user_model()
 
 
 class SeedSchemaTests(SimpleTestCase):
@@ -145,3 +151,64 @@ class ResultsMatchTests(SimpleTestCase):
         expected = QueryResult(["n"], [(1,), (2,)])
 
         self.assertFalse(results_match(actual, expected, ordered=True))
+
+
+class CurriculumTests(SimpleTestCase):
+    def test_curriculum_has_eight_lessons_in_order(self):
+        self.assertEqual(len(LESSONS), 8)
+        self.assertEqual(
+            [lesson.order for lesson in LESSONS], list(range(1, 9))
+        )
+        self.assertEqual(len({lesson.slug for lesson in LESSONS}), 8)
+        self.assertEqual(set(LESSONS_BY_SLUG), {lesson.slug for lesson in LESSONS})
+
+    def test_levels_are_grouped_in_teaching_order(self):
+        beginner = lessons_for_level("Beginner")
+        intermediate = lessons_for_level("Intermediate")
+        advanced = lessons_for_level("Advanced")
+
+        self.assertEqual(len(beginner), 3)
+        self.assertEqual(len(intermediate), 3)
+        self.assertEqual(len(advanced), 2)
+        self.assertEqual(
+            [lesson.order for lesson in beginner + intermediate + advanced],
+            list(range(1, 9)),
+        )
+
+    def test_every_reference_query_runs_and_returns_rows(self):
+        for lesson in LESSONS:
+            with self.subTest(lesson=lesson.slug):
+                result = run_query(lesson.reference_sql)
+                self.assertTrue(result.columns)
+                self.assertTrue(result.rows)
+
+    def test_next_lesson_follows_curriculum_order(self):
+        self.assertEqual(next_lesson(LESSONS[0]), LESSONS[1])
+        self.assertIsNone(next_lesson(LESSONS[-1]))
+
+
+class LessonProgressTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="learner",
+            email="learner@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def test_progress_starts_empty(self):
+        progress = LessonProgress.objects.create(
+            user=self.user, lesson_slug="select-columns"
+        )
+
+        self.assertEqual(progress.attempts, 0)
+        self.assertIsNone(progress.completed_at)
+
+    def test_one_progress_row_per_lesson(self):
+        LessonProgress.objects.create(
+            user=self.user, lesson_slug="select-columns"
+        )
+
+        with self.assertRaises(IntegrityError):
+            LessonProgress.objects.create(
+                user=self.user, lesson_slug="select-columns"
+            )
