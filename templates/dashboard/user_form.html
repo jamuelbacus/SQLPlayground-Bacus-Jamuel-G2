@@ -1,0 +1,33 @@
+{% extends "base_app.html" %}
+
+{% block title %}{{ page_title }} | SQL Playground{% endblock %}
+
+{% block content %}
+  <div class="form-page">
+    <section class="page-head">
+      <div>
+        <h1>{{ page_title }}</h1>
+        {% if target %}<p class="muted">@{{ target.username }}</p>{% endif %}
+      </div>
+      <div class="table-actions">
+        {% if target %}
+          <a class="btn btn-secondary" href="{% url 'user_password' target.pk %}">Change Password</a>
+        {% endif %}
+        <a class="btn btn-secondary" href="{% url 'manage_users' %}">Cancel</a>
+      </div>
+    </section>
+
+    <div class="card form-card">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% include "partials/form_fields.html" %}
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">
+            {% if target %}Save Changes{% else %}Create User{% endif %}
+          </button>
+          <a class="btn btn-secondary" href="{% url 'manage_users' %}">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

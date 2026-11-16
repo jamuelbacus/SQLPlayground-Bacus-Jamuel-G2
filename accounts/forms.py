@@ -10,7 +10,7 @@ class SignUpForm(UserCreationForm):
 
     Role is deliberately not a form field. Self-registration always creates a
     Learner account; Administrator accounts are created by the project team
-    through createsuperuser or the Django admin site.
+    through createsuperuser or the Manage Users screens.
     """
 
     first_name = forms.CharField(
@@ -38,14 +38,6 @@ class SignUpForm(UserCreationForm):
             attrs={"placeholder": "you@example.com", "autocomplete": "email"}
         ),
     )
-    contact_number = forms.CharField(
-        max_length=20,
-        required=False,
-        label="Contact number (optional)",
-        widget=forms.TextInput(
-            attrs={"placeholder": "Phone number", "autocomplete": "tel"}
-        ),
-    )
 
     class Meta:
         model = CustomUser
@@ -54,7 +46,6 @@ class SignUpForm(UserCreationForm):
             "last_name",
             "username",
             "email",
-            "contact_number",
             "password1",
             "password2",
         )
@@ -95,7 +86,6 @@ class SignUpForm(UserCreationForm):
         user.first_name = self.cleaned_data["first_name"].strip()
         user.last_name = self.cleaned_data["last_name"].strip()
         user.email = self.cleaned_data["email"]
-        user.contact_number = self.cleaned_data["contact_number"].strip()
         user.role = CustomUser.Role.LEARNER
         if commit:
             user.save()
@@ -147,12 +137,11 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = CustomUser
-        fields = ("first_name", "last_name", "email", "contact_number", "profile_photo")
+        fields = ("first_name", "last_name", "email", "profile_photo")
         widgets = {
             "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
-            "contact_number": forms.TextInput(attrs={"placeholder": "Phone number"}),
             "profile_photo": forms.ClearableFileInput(attrs={"accept": "image/*"}),
         }
         labels = {"profile_photo": "Profile photo"}
