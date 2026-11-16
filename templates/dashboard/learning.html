@@ -1,0 +1,159 @@
+{% extends "base_app.html" %}
+
+{% block title %}Learning | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Learning</h1>
+      <p class="muted">
+        Explore the sample database, write queries, and build confidence with the SQL playground.
+      </p>
+    </div>
+    <a href="{% url 'saved_query_list' %}" class="button secondary">Saved queries</a>
+  </section>
+
+  {% if messages %}
+    <div class="flash-stack">
+      {% for message in messages %}
+        <div class="alert {% if message.tags %}{{ message.tags }}{% endif %}">{{ message }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <section class="learning-layout">
+    <article class="card workspace-panel">
+      <h2>Sample Database</h2>
+      {% for table in database_schema %}
+        <div class="schema-table">
+          <h3>{{ table.name }}</h3>
+          <div class="schema-columns">
+            {% for column in table.columns %}
+              <span class="pill">{{ column }}</span>
+            {% empty %}
+              <span class="muted">No columns found.</span>
+            {% endfor %}
+          </div>
+          {% if table.rows %}
+            <div class="table-wrapper compact-table">
+              <table>
+                <thead>
+                  <tr>
+                    {% for column in table.columns %}
+                      <th>{{ column }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in table.rows %}
+                    <tr>
+                      {% for value in row %}
+                        <td>{{ value }}</td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </div>
+      {% empty %}
+        <p class="muted">No sample database available yet.</p>
+      {% endfor %}
+    </article>
+
+    <article class="card workspace-panel">
+      <h2>SQL Editor</h2>
+      <form method="post" action="{% url 'execute_sql' %}">
+        {% csrf_token %}
+        <textarea name="sql" rows="12" class="sql-editor" aria-label="SQL editor">{{ default_sql }}</textarea>
+        <div class="editor-actions">
+          <button type="submit" class="button primary">Execute</button>
+          <button type="button" class="button secondary" onclick="document.querySelector('.sql-editor').value = ''">Clear</button>
+        </div>
+      </form>
+    </article>
+  </section>
+
+  <section class="result-grid">
+    <article class="card">
+      <h2>Query History</h2>
+      {% if query_history %}
+        <ul class="list-stack">
+          {% for query in query_history %}
+            <li>
+              <div>
+                <strong>{{ query.executed_at|date:"M d, Y H:i" }}</strong>
+                <div class="sql-snippet">{{ query.sql|truncatechars:90 }}</div>
+              </div>
+              <a href="{% url 'learning' %}?sql={{ query.sql|urlencode }}" class="link-button">Load</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No query history yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="card">
+      <h2>Saved Queries</h2>
+      {% if saved_queries %}
+        <ul class="list-stack">
+          {% for saved_query in saved_queries %}
+            <li>
+              <div>
+                <strong>{{ saved_query.title }}</strong>
+                <div class="sql-snippet">{{ saved_query.sql|truncatechars:90 }}</div>
+              </div>
+              <div class="inline-actions">
+                <a href="{% url 'saved_query_detail' saved_query.pk %}" class="link-button">View</a>
+                <a href="{% url 'learning' %}?sql={{ saved_query.sql|urlencode }}" class="link-button">Load</a>
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No saved queries yet.</p>
+      {% endif %}
+      <div class="save-link-box">
+        <a href="{% url 'saved_query_create' %}" class="button secondary">Save current query</a>
+      </div>
+    </article>
+  </section>
+
+  <section class="card results-card">
+    <h2>Query Results</h2>
+    {% if last_result and last_result.columns %}
+      {% if last_result.success %}
+        <p class="result-status success">Query executed successfully</p>
+      {% else %}
+        <p class="result-status error">{{ last_result.error }}</p>
+      {% endif %}
+      <p class="row-count">Rows returned: {{ last_result.row_count }}</p>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              {% for column in last_result.columns %}
+                <th>{{ column }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in last_result.rows %}
+              <tr>
+                {% for value in row %}
+                  <td>{{ value }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif last_result and last_result.error %}
+      <p class="result-status error">{{ last_result.error }}</p>
+    {% else %}
+      <p class="muted">Run a query to view the result set here.</p>
+    {% endif %}
+  </section>
+{% endblock %}

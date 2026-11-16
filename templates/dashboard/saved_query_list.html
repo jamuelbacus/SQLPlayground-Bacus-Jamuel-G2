@@ -1,0 +1,35 @@
+{% extends "base_app.html" %}
+
+{% block title %}Saved Queries | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Saved Queries</h1>
+      <p class="muted">Reuse your favorite SQL snippets whenever you need them.</p>
+    </div>
+    <a href="{% url 'saved_query_create' %}" class="button primary">Create Query</a>
+  </section>
+
+  <div class="card">
+    {% if saved_queries %}
+      <ul class="list-stack">
+        {% for query in saved_queries %}
+          <li>
+            <div>
+              <strong>{{ query.title }}</strong>
+              <div class="sql-snippet">{{ query.sql|truncatechars:120 }}</div>
+            </div>
+            <div class="inline-actions">
+              <a href="{% url 'saved_query_detail' query.pk %}" class="link-button">View</a>
+              <a href="{% url 'saved_query_edit' query.pk %}" class="link-button">Edit</a>
+              <a href="{% url 'learning' %}?sql={{ query.sql|urlencode }}" class="link-button">Load</a>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No saved queries yet. Create one from the Learning page.</p>
+    {% endif %}
+  </div>
+{% endblock %}

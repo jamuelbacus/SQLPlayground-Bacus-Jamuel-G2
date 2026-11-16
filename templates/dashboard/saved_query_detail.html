@@ -1,0 +1,27 @@
+{% extends "base_app.html" %}
+
+{% block title %}{{ saved_query.title }} | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>{{ saved_query.title }}</h1>
+      <p class="muted">Saved {{ saved_query.updated_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="inline-actions">
+      <a href="{% url 'saved_query_edit' saved_query.pk %}" class="button secondary">Edit</a>
+      <a href="{% url 'saved_query_list' %}" class="button secondary">Back to list</a>
+    </div>
+  </section>
+
+  <div class="card">
+    <pre class="sql-block">{{ saved_query.sql }}</pre>
+    <div class="editor-actions">
+      <a href="{% url 'learning' %}?sql={{ saved_query.sql|urlencode }}" class="button primary">Load into editor</a>
+      <form method="post" action="{% url 'saved_query_delete' saved_query.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="button danger">Delete</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base_app.html" %}
+
+{% block title %}{{ page_title }} | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p class="muted">Save a SQL query so you can reuse it later.</p>
+    </div>
+    <a href="{% url 'saved_query_list' %}" class="button secondary">Back to saved queries</a>
+  </section>
+
+  <div class="card form-card">
+    <form method="post">
+      {% csrf_token %}
+      <div class="field-group">
+        <label for="title">Query title</label>
+        <input id="title" type="text" name="title" value="{{ saved_query.title|default:'' }}" required>
+      </div>
+      <div class="field-group">
+        <label for="sql">SQL</label>
+        <textarea id="sql" name="sql" rows="12" required>{{ saved_query.sql|default:'' }}</textarea>
+      </div>
+      <div class="editor-actions">
+        <button type="submit" class="button primary">Save query</button>
+        <a href="{% url 'saved_query_list' %}" class="button secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

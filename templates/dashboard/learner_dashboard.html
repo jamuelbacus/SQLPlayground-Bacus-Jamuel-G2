@@ -7,8 +7,7 @@
     <div>
       <h1>Learner Dashboard</h1>
       <p class="muted">
-        Welcome back, {{ user.display_name }}. Practice SQL, review feedback,
-        and keep track of your progress.
+        Welcome back, {{ user.display_name }}. Keep track of your SQL progress and move into the practice workspace whenever you are ready.
       </p>
     </div>
   </section>
@@ -16,18 +15,37 @@
   <section class="stat-grid">
     <article class="card stat-card">
       <span class="stat-label">Saved Queries</span>
-      <strong class="stat-value">0</strong>
-      <span class="muted">Every query you run is saved to your history.</span>
+      <strong class="stat-value">{{ saved_query_count }}</strong>
+      <span class="muted">Your personal SQL snippets.</span>
     </article>
     <article class="card stat-card">
       <span class="stat-label">Practice Exercises</span>
-      <strong class="stat-value">0</strong>
-      <span class="muted">Guided exercises from your course.</span>
+      <strong class="stat-value">{{ practice_exercise_count }}</strong>
+      <span class="muted">Starter challenges ready in the learning workspace.</span>
     </article>
     <article class="card stat-card">
       <span class="stat-label">Sample Databases</span>
-      <strong class="stat-value">3</strong>
-      <span class="muted">Ready for practice.</span>
+      <strong class="stat-value">{{ sample_database_count }}</strong>
+      <span class="muted">School Database is ready for practice.</span>
+    </article>
+  </section>
+
+  <section class="dashboard-panel-grid">
+    <article class="card dashboard-panel">
+      <h2>Overall learning progress</h2>
+      <div class="progress-wrap">
+        <div class="progress-bar" aria-label="Learning progress">
+          <span style="width: {{ progress_percent }}%;"></span>
+        </div>
+        <strong>{{ progress_percent }}%</strong>
+      </div>
+      <p class="muted">Queries executed: {{ query_history_count }}</p>
+    </article>
+
+    <article class="card dashboard-panel">
+      <h2>Continue learning</h2>
+      <p class="muted">Jump back into the SQL playground and practice queries against the sample database.</p>
+      <a href="{% url 'learning' %}" class="button primary">Go to Learning</a>
     </article>
   </section>
 {% endblock %}
