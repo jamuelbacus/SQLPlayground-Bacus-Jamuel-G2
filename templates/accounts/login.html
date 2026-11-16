@@ -1,6 +1,6 @@
 {% extends "base_auth.html" %}
 
-{% block title %}Log in | SQL Playground{% endblock %}
+{% block title %}Log In | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="auth-layout">
@@ -10,7 +10,7 @@
           {% include "partials/brand.html" %}
         </div>
 
-        <h1>Welcome back.</h1>
+        <h1>Welcome Back.</h1>
         <p class="auth-subtitle">Sign in to continue practicing SQL.</p>
 
         <form method="post" action="{% url 'login' %}" class="auth-form" novalidate>

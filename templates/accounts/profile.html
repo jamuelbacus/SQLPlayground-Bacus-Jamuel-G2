@@ -1,14 +1,13 @@
 {% extends "base_app.html" %}
 
-{% block title %}My profile | SQL Playground{% endblock %}
+{% block title %}My Profile | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="page-head">
     <div>
-      <p class="eyebrow">Account</p>
-      <h1>My profile</h1>
+      <h1>My Profile</h1>
     </div>
-    <a class="btn btn-primary" href="{% url 'profile_edit' %}">Edit profile</a>
+    <a class="btn btn-primary" href="{% url 'profile_edit' %}">Edit Profile</a>
   </section>
 
   <div class="profile-grid">
@@ -30,30 +29,26 @@
     </aside>
 
     <section class="card">
-      <h2>Account details</h2>
+      <h2>Account Details</h2>
       <dl class="detail-list">
         <div>
-          <dt>First name</dt>
+          <dt>First Name</dt>
           <dd>{{ user.first_name|default:"Not set" }}</dd>
         </div>
         <div>
-          <dt>Last name</dt>
+          <dt>Last Name</dt>
           <dd>{{ user.last_name|default:"Not set" }}</dd>
         </div>
         <div>
-          <dt>Email address</dt>
+          <dt>Email Address</dt>
           <dd>{{ user.email }}</dd>
         </div>
         <div>
-          <dt>Contact number</dt>
-          <dd>{{ user.contact_number|default:"Not set" }}</dd>
-        </div>
-        <div>
-          <dt>Member since</dt>
+          <dt>Member Since</dt>
           <dd>{{ user.date_joined|date:"F j, Y" }}</dd>
         </div>
         <div>
-          <dt>Last login</dt>
+          <dt>Last Login</dt>
           <dd>{{ user.last_login|date:"F j, Y g:i A"|default:"Not yet" }}</dd>
         </div>
       </dl>

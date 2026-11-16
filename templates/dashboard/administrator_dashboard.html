@@ -1,22 +1,17 @@
 {% extends "base_app.html" %}
 
-{% block title %}Administrator dashboard | SQL Playground{% endblock %}
+{% block title %}Administrator Dashboard | SQL Playground{% endblock %}
 
 {% block content %}
   <section class="page-head">
     <div>
-      <p class="eyebrow">Administrator dashboard</p>
-      <h1>System overview</h1>
-      <p class="muted">Monitor registered accounts and manage the SQL Playground.</p>
+      <h1>System Overview</h1>
+      <p class="muted">Monitor registered accounts and manage SQL Playground users.</p>
     </div>
     <a class="btn btn-primary" href="{% url 'admin:index' %}">Open Django admin</a>
   </section>
 
   <section class="stat-grid">
-    <article class="card stat-card">
-      <span class="stat-label">Total accounts</span>
-      <strong class="stat-value">{{ total_users }}</strong>
-    </article>
     <article class="card stat-card">
       <span class="stat-label">Learners</span>
       <strong class="stat-value">{{ total_learners }}</strong>
@@ -29,7 +24,7 @@
 
   <section class="card">
     <div class="section-head">
-      <h2>Recent registrations</h2>
+      <h2>Recent Registrations</h2>
       <a class="text-link" href="{% url 'admin:accounts_customuser_changelist' %}">Manage users</a>
     </div>
     {% if recent_users %}
@@ -60,23 +55,5 @@
     {% else %}
       <p class="muted">No accounts have been registered yet.</p>
     {% endif %}
-  </section>
-
-  <section class="content-grid">
-    <article class="card">
-      <h2>Administrator tools</h2>
-      <ul class="check-list">
-        <li>Create or deactivate user accounts in Django admin.</li>
-        <li>Promote a trusted account to Administrator when needed.</li>
-        <li>Review recent account activity.</li>
-      </ul>
-    </article>
-    <article class="card">
-      <h2>Role reminder</h2>
-      <p class="muted">
-        Learners can only open the learner dashboard. Administrator pages are
-        protected by a server-side role check, not just a hidden navigation link.
-      </p>
-    </article>
   </section>
 {% endblock %}
