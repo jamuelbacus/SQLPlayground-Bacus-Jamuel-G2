@@ -1,0 +1,53 @@
+{% extends "base_app.html" %}
+
+{% block title %}Lessons | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head lesson-head">
+    <div>
+      <p class="eyebrow">Guided path</p>
+      <h1>Lessons</h1>
+      <p class="lead">
+        Work from the basics of SELECT to joins, aggregates, and subqueries.
+        Each lesson checks your query against the sample database.
+      </p>
+    </div>
+    <div class="progress-summary">
+      <strong>{{ completed_count }} of {{ total_lessons }} completed</strong>
+      <div class="progress-bar" aria-label="Lesson progress">
+        <span style="width: {{ progress_percent }}%;"></span>
+      </div>
+    </div>
+  </section>
+
+  {% for level in levels %}
+    <section class="level-section">
+      <div class="level-head">
+        <h2>{{ level.name }}</h2>
+        <span class="muted">{{ level.lessons|length }} lessons</span>
+      </div>
+      <div class="lesson-grid">
+        {% for item in level.lessons %}
+          <a
+            class="card lesson-card{% if item.completed %} is-complete{% elif item.current %} is-current{% endif %}"
+            href="{% url 'lesson_detail' item.lesson.slug %}"
+          >
+            <span class="lesson-number">{{ item.lesson.order }}</span>
+            <span class="pill">{{ item.lesson.concept }}</span>
+            <h3>{{ item.lesson.title }}</h3>
+            <p class="muted">{{ item.lesson.summary }}</p>
+            <span class="lesson-status">
+              {% if item.completed %}
+                Completed
+              {% elif item.current %}
+                Continue lesson
+              {% else %}
+                Start lesson
+              {% endif %}
+            </span>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base_app.html" %}
+
+{% block title %}{{ lesson.title }} | Lessons | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head lesson-head">
+    <div>
+      <a class="back-link" href="{% url 'lesson_index' %}">Back to lessons</a>
+      <p class="eyebrow">{{ lesson.level }} · Lesson {{ lesson.order }}</p>
+      <h1>{{ lesson.title }}</h1>
+      <p class="lead">{{ lesson.summary }}</p>
+    </div>
+    <div class="lesson-meta">
+      <span class="pill">{{ lesson.concept }}</span>
+      {% if completed %}
+        <span class="status-pill success">Completed</span>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="lesson-layout">
+    <article class="card lesson-brief">
+      <h2>Your task</h2>
+      <p>{{ lesson.task }}</p>
+
+      <div class="brief-block">
+        <h3>Goal</h3>
+        <p class="muted">{{ lesson.objective }}</p>
+      </div>
+
+      <details class="hint">
+        <summary>Need a hint?</summary>
+        <p>{{ lesson.hint }}</p>
+      </details>
+    </article>
+
+    <article class="card workspace-panel">
+      <div class="panel-head">
+        <h2>SQL editor</h2>
+        <span class="muted">Practice engine</span>
+      </div>
+
+      <form method="post" action="{% url 'lesson_check' lesson.slug %}">
+        {% csrf_token %}
+        <label class="sr-only" for="lesson-sql">SQL query</label>
+        <textarea
+          id="lesson-sql"
+          name="sql"
+          rows="10"
+          class="sql-editor"
+          spellcheck="false"
+        >{{ editor_sql }}</textarea>
+        <div class="editor-actions">
+          <button type="submit" class="button primary">Run and check</button>
+          <a href="{% url 'sandbox' %}" class="button secondary">Open sandbox</a>
+        </div>
+      </form>
+
+      <div class="lesson-result" aria-live="polite">
+        {% if result %}
+          {% if result.error %}
+            <p class="status-pill danger">{{ result.error }}</p>
+          {% elif result.passed %}
+            <p class="status-pill success">{{ result.message }}</p>
+          {% else %}
+            <p class="status-pill warning">{{ result.message }}</p>
+          {% endif %}
+
+          {% if result.columns %}
+            <p class="row-count">
+              Rows returned: {{ result.row_count }}
+              {% if result.truncated %}(first 200 shown){% endif %}
+            </p>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    {% for column in result.columns %}
+                      <th>{{ column }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in result.rows %}
+                    <tr>
+                      {% for value in row %}
+                        <td>{{ value }}</td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        {% else %}
+          <p class="muted">
+            Run your query to check it against the task. You can try as many
+            times as you need.
+          </p>
+        {% endif %}
+      </div>
+
+      {% if completed %}
+        <div class="lesson-next">
+          {% if next_lesson %}
+            <a class="button primary" href="{% url 'lesson_detail' next_lesson.slug %}">
+              Next lesson: {{ next_lesson.title }}
+            </a>
+          {% else %}
+            <a class="button primary" href="{% url 'lesson_index' %}">
+              Back to all lessons
+            </a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </article>
+  </section>
+{% endblock %}

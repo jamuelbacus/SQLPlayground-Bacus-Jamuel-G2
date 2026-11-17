@@ -153,6 +153,20 @@ class AppChromeTests(TestCase):
         self.assertContains(response, "data-app-header")
         self.assertContains(response, "Log out")
         self.assertNotContains(response, "FAQ")
+        for label in ("Dashboard", "Lessons", "Sandbox", "Profile"):
+            self.assertContains(response, label)
+        self.assertNotContains(response, ">Learning<")
+
+    def test_lesson_and_sandbox_headers_mark_the_active_section(self):
+        lesson_response = self.client.get(reverse("lesson_index"))
+        self.assertContains(
+            lesson_response, 'class="nav-link active" href="/lessons/"'
+        )
+
+        sandbox_response = self.client.get(reverse("sandbox"))
+        self.assertContains(
+            sandbox_response, 'class="nav-link active" href="/sandbox/"'
+        )
 
     def test_profile_uses_app_header(self):
         response = self.client.get(reverse("profile"))

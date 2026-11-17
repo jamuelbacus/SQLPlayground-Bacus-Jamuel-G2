@@ -150,10 +150,53 @@
       var result = preview.querySelector("[data-preview-result]");
       var feedback = preview.querySelector("[data-preview-feedback]");
       var status = preview.querySelector("[data-preview-status]");
+      var heroPreview = preview.closest(".hero-preview");
 
       if (!run || !result) {
         return;
       }
+
+      function reserveHeight() {
+        if (!window.matchMedia("(min-width: 901px)").matches) {
+          if (heroPreview) {
+            heroPreview.style.minHeight = "";
+          }
+          return;
+        }
+
+        var emptyHidden = empty ? empty.hidden : null;
+        var resultHidden = result.hidden;
+        var feedbackHidden = feedback ? feedback.hidden : null;
+
+        if (empty) {
+          empty.hidden = true;
+        }
+        result.hidden = false;
+        if (feedback) {
+          feedback.hidden = false;
+        }
+
+        var reserved = preview.getBoundingClientRect().height + "px";
+
+        if (empty) {
+          empty.hidden = emptyHidden;
+        }
+        result.hidden = resultHidden;
+        if (feedback) {
+          feedback.hidden = feedbackHidden;
+        }
+        if (heroPreview) {
+          heroPreview.style.minHeight = reserved;
+        }
+      }
+
+      var resizeTimer;
+      reserveHeight();
+      window.addEventListener("load", reserveHeight);
+      window.addEventListener("resize", function () {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(reserveHeight, 120);
+      });
 
       run.addEventListener("click", function () {
         if (run.getAttribute("aria-busy") === "true") {
@@ -370,11 +413,28 @@
     });
   }
 
+  function setupClearEditor() {
+    document.querySelectorAll("[data-clear-editor]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var form = button.closest("form");
+        var editor = form ? form.querySelector(".sql-editor") : null;
+
+        if (!editor) {
+          return;
+        }
+
+        editor.value = "";
+        editor.focus();
+      });
+    });
+  }
+
   setupTheme();
   setupMenus();
   setupHeader();
   setupPasswordToggles();
   setupPasswordRules();
   setupPreview();
+  setupClearEditor();
   setupReveal();
 })();

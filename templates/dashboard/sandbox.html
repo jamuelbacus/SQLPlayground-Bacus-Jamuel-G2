@@ -1,0 +1,194 @@
+{% extends "base_app.html" %}
+
+{% block title %}Sandbox | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <p class="eyebrow">Free practice</p>
+      <h1>Sandbox</h1>
+      <p class="lead">
+        Test any SELECT statement against the School Database. Use this space
+        when you want to explore without following a lesson.
+      </p>
+    </div>
+    <a href="{% url 'saved_query_list' %}" class="button secondary">
+      Saved queries
+    </a>
+  </section>
+
+  <div class="workspace-grid">
+    <div class="workspace-main">
+      <article class="card workspace-panel">
+        <div class="panel-head">
+          <h2>SQL editor</h2>
+          <span class="pill">School Database</span>
+        </div>
+
+        <form method="post" action="{% url 'sandbox_execute' %}">
+          {% csrf_token %}
+          <label class="sr-only" for="sandbox-sql">SQL query</label>
+          <textarea
+            id="sandbox-sql"
+            name="sql"
+            rows="12"
+            class="sql-editor"
+            spellcheck="false"
+          >{{ default_sql }}</textarea>
+          <div class="editor-actions">
+            <button type="submit" class="button primary">Run query</button>
+            <button type="button" class="button secondary" data-clear-editor>
+              Clear
+            </button>
+            <a href="{% url 'saved_query_create' %}" class="button secondary">
+              Save query
+            </a>
+          </div>
+        </form>
+      </article>
+
+      <article class="card results-card" aria-live="polite">
+        <div class="panel-head">
+          <h2>Results</h2>
+          {% if last_result.success %}
+            <span class="status-pill success">Success</span>
+          {% elif last_result.error %}
+            <span class="status-pill danger">Error</span>
+          {% endif %}
+        </div>
+
+        {% if last_result.error %}
+          <p class="status-pill danger">{{ last_result.error }}</p>
+        {% elif last_result.columns %}
+          <p class="row-count">
+            Rows returned: {{ last_result.row_count }}
+            {% if last_result.truncated %}(first 200 shown){% endif %}
+          </p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  {% for column in last_result.columns %}
+                    <th>{{ column }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in last_result.rows %}
+                  <tr>
+                    {% for value in row %}
+                      <td>{{ value }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="muted">Run a query to see the result set here.</p>
+        {% endif %}
+      </article>
+    </div>
+
+    <aside class="workspace-rail">
+      <details class="rail-section" open>
+        <summary>Schema</summary>
+        <div class="rail-body">
+          {% for table in database_schema %}
+            <div class="schema-table">
+              <h3>{{ table.name }}</h3>
+              <div class="schema-columns">
+                {% for column in table.columns %}
+                  <span class="pill">{{ column }}</span>
+                {% endfor %}
+              </div>
+              {% if table.rows %}
+                <div class="table-wrapper compact-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {% for column in table.columns %}
+                          <th>{{ column }}</th>
+                        {% endfor %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in table.rows %}
+                        <tr>
+                          {% for value in row %}
+                            <td>{{ value }}</td>
+                          {% endfor %}
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% endif %}
+            </div>
+          {% empty %}
+            <p class="muted">No sample database available yet.</p>
+          {% endfor %}
+        </div>
+      </details>
+
+      <details class="rail-section">
+        <summary>Query history</summary>
+        <div class="rail-body">
+          {% if query_history %}
+            <ul class="list-stack">
+              {% for query in query_history %}
+                <li>
+                  <div>
+                    <strong>{{ query.executed_at|date:"M d, Y H:i" }}</strong>
+                    <div class="sql-snippet">{{ query.sql|truncatechars:90 }}</div>
+                  </div>
+                  <a
+                    href="{% url 'sandbox' %}?sql={{ query.sql|urlencode }}"
+                    class="link-button"
+                  >Load</a>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No query history yet.</p>
+          {% endif %}
+        </div>
+      </details>
+
+      <details class="rail-section">
+        <summary>Saved queries</summary>
+        <div class="rail-body">
+          {% if saved_queries %}
+            <ul class="list-stack">
+              {% for saved_query in saved_queries %}
+                <li>
+                  <div>
+                    <strong>{{ saved_query.title }}</strong>
+                    <div class="sql-snippet">
+                      {{ saved_query.sql|truncatechars:90 }}
+                    </div>
+                  </div>
+                  <div class="inline-actions">
+                    <a
+                      href="{% url 'saved_query_detail' saved_query.pk %}"
+                      class="link-button"
+                    >View</a>
+                    <a
+                      href="{% url 'sandbox' %}?sql={{ saved_query.sql|urlencode }}"
+                      class="link-button"
+                    >Load</a>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No saved queries yet.</p>
+          {% endif %}
+          <a href="{% url 'saved_query_create' %}" class="button secondary">
+            Save a query
+          </a>
+        </div>
+      </details>
+    </aside>
+  </div>
+{% endblock %}

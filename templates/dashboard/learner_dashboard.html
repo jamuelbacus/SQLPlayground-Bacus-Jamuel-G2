@@ -5,47 +5,64 @@
 {% block content %}
   <section class="page-head">
     <div>
+      <p class="eyebrow">Your progress</p>
       <h1>Learner Dashboard</h1>
-      <p class="muted">
-        Welcome back, {{ user.display_name }}. Keep track of your SQL progress and move into the practice workspace whenever you are ready.
+      <p class="lead">
+        Welcome back, {{ user.display_name }}. Track your lesson progress and
+        keep building SQL confidence one query at a time.
       </p>
     </div>
+    <a href="{% url 'lesson_index' %}" class="button primary">Open lessons</a>
   </section>
 
   <section class="stat-grid">
     <article class="card stat-card">
-      <span class="stat-label">Saved Queries</span>
+      <span class="stat-label">Lessons completed</span>
+      <strong class="stat-value">{{ completed_lesson_count }}</strong>
+      <span class="muted">Out of {{ total_lessons }} guided lessons.</span>
+    </article>
+    <article class="card stat-card">
+      <span class="stat-label">Saved queries</span>
       <strong class="stat-value">{{ saved_query_count }}</strong>
       <span class="muted">Your personal SQL snippets.</span>
     </article>
     <article class="card stat-card">
-      <span class="stat-label">Practice Exercises</span>
-      <strong class="stat-value">{{ practice_exercise_count }}</strong>
-      <span class="muted">Starter challenges ready in the learning workspace.</span>
-    </article>
-    <article class="card stat-card">
-      <span class="stat-label">Sample Databases</span>
-      <strong class="stat-value">{{ sample_database_count }}</strong>
-      <span class="muted">School Database is ready for practice.</span>
+      <span class="stat-label">Queries run</span>
+      <strong class="stat-value">{{ query_history_count }}</strong>
+      <span class="muted">Sandbox queries in your history.</span>
     </article>
   </section>
 
   <section class="dashboard-panel-grid">
     <article class="card dashboard-panel">
-      <h2>Overall learning progress</h2>
+      <h2>Overall lesson progress</h2>
       <div class="progress-wrap">
-        <div class="progress-bar" aria-label="Learning progress">
+        <div class="progress-bar" aria-label="Lesson progress">
           <span style="width: {{ progress_percent }}%;"></span>
         </div>
         <strong>{{ progress_percent }}%</strong>
       </div>
-      <p class="muted">Queries executed: {{ query_history_count }}</p>
+      <p class="muted">
+        {{ completed_lesson_count }} of {{ total_lessons }} lessons completed.
+      </p>
     </article>
 
     <article class="card dashboard-panel">
       <h2>Continue learning</h2>
-      <p class="muted">Jump back into the SQL playground and practice queries against the sample database.</p>
-      <a href="{% url 'learning' %}" class="button primary">Go to Learning</a>
+      {% if current_lesson %}
+        <p class="muted">
+          Next up: {{ current_lesson.title }}. {{ current_lesson.summary }}
+        </p>
+        <a
+          href="{% url 'lesson_detail' current_lesson.slug %}"
+          class="button primary"
+        >Continue lesson {{ current_lesson.order }}</a>
+      {% else %}
+        <p class="muted">
+          You finished every lesson. Keep exploring in the free sandbox.
+        </p>
+        <a href="{% url 'sandbox' %}" class="button primary">Open sandbox</a>
+      {% endif %}
     </article>
   </section>
 {% endblock %}
