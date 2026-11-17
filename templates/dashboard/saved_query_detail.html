@@ -17,7 +17,7 @@
   <div class="card">
     <pre class="sql-block">{{ saved_query.sql }}</pre>
     <div class="editor-actions">
-      <a href="{% url 'learning' %}?sql={{ saved_query.sql|urlencode }}" class="button primary">Load into editor</a>
+      <a href="{% url 'sandbox' %}?sql={{ saved_query.sql|urlencode }}" class="button primary">Load into editor</a>
       <form method="post" action="{% url 'saved_query_delete' saved_query.pk %}">
         {% csrf_token %}
         <button type="submit" class="button danger">Delete</button>

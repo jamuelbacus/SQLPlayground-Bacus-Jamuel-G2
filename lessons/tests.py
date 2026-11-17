@@ -3,6 +3,9 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+from django.utils.html import escape
+from django.utils import timezone
 
 from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
@@ -212,3 +215,189 @@ class LessonProgressTests(TestCase):
             LessonProgress.objects.create(
                 user=self.user, lesson_slug="select-columns"
             )
+
+
+class LessonViewTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="learner",
+            email="learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.administrator = User.objects.create_user(
+            username="admin1",
+            email="admin1@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.client.force_login(self.learner)
+
+    def test_anonymous_user_is_sent_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(reverse("lesson_index"))
+
+        self.assertRedirects(
+            response, f"{reverse('login')}?next={reverse('lesson_index')}"
+        )
+
+    def test_administrator_cannot_open_lessons(self):
+        self.client.force_login(self.administrator)
+
+        self.assertEqual(self.client.get(reverse("lesson_index")).status_code, 403)
+        self.assertEqual(
+            self.client.get(
+                reverse("lesson_detail", args=["select-columns"])
+            ).status_code,
+            403,
+        )
+
+    def test_index_lists_all_lessons_and_levels(self):
+        response = self.client.get(reverse("lesson_index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_lessons"], 8)
+        self.assertEqual(response.context["completed_count"], 0)
+        self.assertContains(response, "Beginner")
+        self.assertContains(response, "Intermediate")
+        self.assertContains(response, "Advanced")
+        for lesson in LESSONS:
+            self.assertContains(response, lesson.title)
+
+    def test_index_marks_completed_and_current_lesson(self):
+        LessonProgress.objects.create(
+            user=self.learner,
+            lesson_slug="select-columns",
+            completed_at=timezone.now(),
+        )
+
+        response = self.client.get(reverse("lesson_index"))
+
+        self.assertEqual(response.context["completed_count"], 1)
+        self.assertContains(response, "Completed")
+        self.assertContains(response, "Continue lesson")
+
+    def test_detail_shows_task_starter_and_hint(self):
+        lesson = LESSONS_BY_SLUG["select-columns"]
+
+        response = self.client.get(reverse("lesson_detail", args=[lesson.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, escape(lesson.task))
+        self.assertContains(response, escape(lesson.starter_sql))
+        self.assertContains(response, escape(lesson.hint))
+
+    def test_unknown_lesson_returns_404(self):
+        response = self.client.get(reverse("lesson_detail", args=["missing"]))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_check_redirects_without_attempt(self):
+        response = self.client.get(
+            reverse("lesson_check", args=["select-columns"])
+        )
+
+        self.assertRedirects(
+            response, reverse("lesson_detail", args=["select-columns"])
+        )
+        self.assertFalse(LessonProgress.objects.exists())
+
+    def test_correct_query_completes_lesson(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": "SELECT first_name, last_name FROM students;"},
+        )
+
+        self.assertRedirects(
+            response, reverse("lesson_detail", args=["select-columns"])
+        )
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNotNone(progress.completed_at)
+
+        detail = self.client.get(
+            reverse("lesson_detail", args=["select-columns"])
+        )
+        self.assertContains(detail, "Completed")
+
+    def test_unordered_lesson_accepts_a_different_row_order(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {
+                "sql": (
+                    "SELECT first_name, last_name FROM students "
+                    "ORDER BY last_name;"
+                )
+            },
+        )
+
+        self.assertRedirects(
+            response, reverse("lesson_detail", args=["select-columns"])
+        )
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertIsNotNone(progress.completed_at)
+
+    def test_wrong_query_does_not_complete(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": "SELECT first_name FROM students;"},
+        )
+
+        self.assertRedirects(
+            response, reverse("lesson_detail", args=["select-columns"])
+        )
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNone(progress.completed_at)
+
+        detail = self.client.get(
+            reverse("lesson_detail", args=["select-columns"])
+        )
+        self.assertContains(detail, "Not quite yet")
+
+    def test_attempts_increment_on_every_check(self):
+        url = reverse("lesson_check", args=["select-columns"])
+
+        self.client.post(url, {"sql": "SELECT first_name FROM students;"})
+        self.client.post(url, {"sql": "SELECT first_name FROM students;"})
+
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 2)
+
+    def test_completion_timestamp_is_stable(self):
+        url = reverse("lesson_check", args=["select-columns"])
+        sql = "SELECT first_name, last_name FROM students;"
+
+        self.client.post(url, {"sql": sql})
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        first_completion = progress.completed_at
+
+        self.client.post(url, {"sql": sql})
+        progress.refresh_from_db()
+
+        self.assertEqual(progress.completed_at, first_completion)
+        self.assertEqual(progress.attempts, 2)
+
+    def test_invalid_sql_reports_error_without_completing(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": "SELEC first_name FROM students;"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Only SELECT queries")
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNone(progress.completed_at)

@@ -23,13 +23,13 @@
             <div class="inline-actions">
               <a href="{% url 'saved_query_detail' query.pk %}" class="link-button">View</a>
               <a href="{% url 'saved_query_edit' query.pk %}" class="link-button">Edit</a>
-              <a href="{% url 'learning' %}?sql={{ query.sql|urlencode }}" class="link-button">Load</a>
+              <a href="{% url 'sandbox' %}?sql={{ query.sql|urlencode }}" class="link-button">Load</a>
             </div>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="muted">No saved queries yet. Create one from the Learning page.</p>
+      <p class="muted">No saved queries yet. Create one from the Sandbox.</p>
     {% endif %}
   </div>
 {% endblock %}
