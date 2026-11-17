@@ -30,11 +30,30 @@
 
 ## Overview
 
-SQL Playground is a web-based learning platform that allows IT students to practice SQL through interactive query writing and execution. Students open a sample School Database, write a query in the editor, run it, and see the results in the browser without installing a database server.
+SQL Playground is a web-based learning platform that allows IT students to practice SQL through interactive query writing and execution. Students follow guided lessons or open the free sandbox, write a query in the editor, run it, and see the results in the browser without installing a database server.
 
-The project now covers the full learner flow: registration, login, role-based dashboards, profile management, a SQL practice workspace, saved queries, and query history. Administrator functions are built into the project at `/dashboard/administrator/`; the Django admin site is not installed. Invalid or disallowed statements return a clear message, and every execution is recorded in the learner's query history.
+The project now covers the full learner flow: registration, login, role-based dashboards, profile management, auto-checked guided lessons, a free SQL sandbox, saved queries, and query history. Administrator functions are built into the project at `/dashboard/administrator/`; the Django admin site is not installed. Invalid or disallowed statements return a clear message, and every sandbox execution is recorded in the learner's query history.
 
 ## Features
+
+### Guided Lessons
+- Eight lessons across Beginner, Intermediate, and Advanced levels, from `SELECT` and `WHERE` to joins, `HAVING`, and subqueries.
+- Each lesson states a task, gives a starter query and a hint, and checks the learner's result against a reference query.
+- Order-sensitive lessons compare row order; other lessons accept the same rows in any order.
+- Column aliases are ignored when grading, so learners can name aggregate columns the way the task asks.
+- Progress and attempt counts are stored per learner, and completed lessons unlock a next-lesson link.
+- Lesson checks run against the same isolated practice engine as the sandbox.
+
+### SQL Sandbox
+- Built-in School Database with `students`, `courses`, and `enrollments` tables, seeded automatically in an isolated SQLite database.
+- Practice SQL never reaches application tables or the hosted PostgreSQL database.
+- Schema viewer listing each table's columns and sample rows.
+- SQL editor that runs one `SELECT` statement at a time; blank input, non-`SELECT` statements, write attempts, and multiple statements are rejected with a clear message.
+- Results table with returned columns, rows, and row count, capped at 200 rows.
+- Query timeout and row limits protect the request from slow or runaway queries.
+- Query history showing the 10 most recent executions for the signed-in learner.
+- Saved queries with create, view, edit, and delete, scoped to the owning learner.
+- Editor contents and the last result are kept in the session so the workspace survives redirects.
 
 ### User Accounts
 - Learner registration with required-field, email-format, unique username, unique email, and password-confirmation validation.
@@ -49,16 +68,7 @@ The project now covers the full learner flow: registration, login, role-based da
 - Server-side role-based access control on every dashboard view.
 - Automatic Learner assignment during public registration.
 - Superusers are always assigned the Administrator role.
-- Learner dashboard shows saved query count, practice exercises, sample databases, total queries executed, and a progress bar.
-
-### SQL Practice Workspace
-- Built-in School Database with `students`, `courses`, and `enrollments` tables, created automatically with sample rows on first use.
-- Schema viewer listing each table's columns and sample rows.
-- SQL editor that runs one `SELECT` statement at a time; blank input, non-`SELECT` statements, and multiple statements are rejected with a clear message.
-- Results table with returned columns, rows, and row count.
-- Query history showing the 10 most recent executions for the signed-in learner.
-- Saved queries with create, view, edit, and delete, scoped to the owning learner.
-- Editor contents and the last result are kept in the session so the workspace survives redirects.
+- Learner dashboard shows completed lessons, saved queries, queries executed, lesson progress, and a link to the next lesson.
 
 ### Administrator User Management
 - Account management inside the project at `/dashboard/administrator/users/`; the Django admin site is not installed.
@@ -77,6 +87,8 @@ The project now covers the full learner flow: registration, login, role-based da
 - Light and dark themes with a toggle that remembers the choice.
 - Accessible forms with inline validation feedback.
 - Consistent branding and responsive layouts across public and signed-in pages.
+- Lessons path with level sections, completion states, and a next-lesson flow.
+- Sandbox workspace with a schema rail, query history, and saved queries.
 
 ## Tech Stack
 
@@ -84,7 +96,8 @@ The project now covers the full learner flow: registration, login, role-based da
 |---|---|
 | Backend | Django 6.1 |
 | Frontend | Django Templates, HTML, CSS, JavaScript |
-| Database | PostgreSQL (Supabase) |
+| Application Database | PostgreSQL (Supabase) |
+| Practice Engine | Isolated in-memory SQLite |
 | Configuration | python-dotenv |
 | Image Processing | Pillow |
 | Testing | Django Test Framework |
@@ -165,7 +178,7 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 python manage.py migrate
 ```
 
-The School Database tables used by the practice workspace are created automatically the first time a learner opens the workspace.
+The School Database used by lessons and the sandbox is seeded automatically in an isolated in-memory SQLite connection. It does not create or modify tables in the hosted PostgreSQL database.
 
 ### 6. Create an administrator account
 
@@ -193,19 +206,23 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 | `/logout/` | Authenticated | User logout (POST only) |
 | `/dashboard/` | Authenticated | Role-based dashboard redirect |
 | `/dashboard/learner/` | Learner | Learner dashboard |
-| `/dashboard/learning/` | Learner | SQL practice workspace |
-| `/dashboard/learning/execute/` | Learner | Run a `SELECT` statement (POST) |
-| `/dashboard/learning/saved/` | Learner | Saved query list |
-| `/dashboard/learning/saved/new/` | Learner | Save a new query |
-| `/dashboard/learning/saved/<id>/` | Learner | Saved query detail |
-| `/dashboard/learning/saved/<id>/edit/` | Learner | Edit a saved query |
-| `/dashboard/learning/saved/<id>/delete/` | Learner | Delete a saved query |
+| `/lessons/` | Learner | Guided lesson path |
+| `/lessons/<slug>/` | Learner | Lesson brief, editor, and result |
+| `/lessons/<slug>/check/` | Learner | Run and check a lesson query (POST) |
+| `/sandbox/` | Learner | Free SQL sandbox |
+| `/sandbox/execute/` | Learner | Run a `SELECT` statement (POST) |
+| `/sandbox/saved/` | Learner | Saved query list |
+| `/sandbox/saved/new/` | Learner | Save a new query |
+| `/sandbox/saved/<id>/` | Learner | Saved query detail |
+| `/sandbox/saved/<id>/edit/` | Learner | Edit a saved query |
+| `/sandbox/saved/<id>/delete/` | Learner | Delete a saved query |
 | `/dashboard/administrator/` | Administrator | Administrator dashboard |
 | `/dashboard/administrator/users/` | Administrator | Search and manage accounts |
 | `/dashboard/administrator/users/new/` | Administrator | Create an account |
 | `/dashboard/administrator/users/<id>/edit/` | Administrator | Edit an account |
 | `/dashboard/administrator/users/<id>/password/` | Administrator | Change an account password |
 | `/dashboard/administrator/users/<id>/delete/` | Administrator | Delete an account |
+| `/dashboard/learning/` | Public | Permanent redirect to `/sandbox/` |
 | `/profile/` | Authenticated | View profile |
 | `/profile/edit/` | Authenticated | Edit profile |
 
@@ -214,30 +231,35 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 Run the test suite:
 
 ```bash
-python manage.py test
+python manage.py test --settings=sqlplayground.settings_test
 ```
 
-The current test suite contains 63 tests covering:
+`settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. Production settings are unchanged, so `python manage.py test` still uses the configured PostgreSQL database.
+
+The current test suite contains 114 tests covering:
 
 - Registration and input validation
 - Password hashing
 - Login and logout, including the remember me option
 - Protected routes and role-based dashboard access
 - Profile ownership and updates
-- Public and signed-in page layouts
+- Public and signed-in page layouts, including the Lessons and Sandbox navigation
 - Administrator user management and self-lockout protections
 - Saved query ownership and SQL execution restrictions
-
-A local PostgreSQL instance may be used for testing if the hosted database does not permit test database creation.
+- Guided lesson curriculum, grading, attempt counts, and completion
+- Sandbox isolation from application tables, row limits, timeouts, and history
+- Permanent redirect from the old learning route to the sandbox
 
 ## Project Structure
 
 ```text
 .
 ├── accounts/        # Authentication, roles, profiles, and account tests
-├── dashboard/       # Role dashboards, SQL workspace, saved queries, user management
+├── dashboard/       # Role dashboards, sandbox, saved queries, user management
 │   └── migrations/  # QueryHistory and SavedQuery schema
-├── sqlplayground/   # Project settings and URL configuration
+├── lessons/         # Guided curriculum, isolated practice engine, progress
+│   └── migrations/  # LessonProgress schema
+├── sqlplayground/   # Project settings, test settings, and URL configuration
 ├── static/          # CSS, JavaScript, and brand assets
 ├── templates/       # HTML templates
 ├── docs/            # Project documentation
@@ -255,7 +277,9 @@ A local PostgreSQL instance may be used for testing if the hosted database does 
 - [x] Sample database
 - [x] Query history and saved queries
 - [x] Administrator user management without the Django admin site
-- [ ] Additional sample databases and guided exercises
+- [x] Guided lessons with automatic result checking and saved progress
+- [x] Isolated free sandbox with schema, history, and saved queries
+- [ ] Additional sample databases and lesson tracks
 - [ ] Richer query feedback and explanations
 
 ## Authors
