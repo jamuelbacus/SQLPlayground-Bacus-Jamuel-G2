@@ -413,11 +413,28 @@
     });
   }
 
+  function setupClearEditor() {
+    document.querySelectorAll("[data-clear-editor]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var form = button.closest("form");
+        var editor = form ? form.querySelector(".sql-editor") : null;
+
+        if (!editor) {
+          return;
+        }
+
+        editor.value = "";
+        editor.focus();
+      });
+    });
+  }
+
   setupTheme();
   setupMenus();
   setupHeader();
   setupPasswordToggles();
   setupPasswordRules();
   setupPreview();
+  setupClearEditor();
   setupReveal();
 })();
