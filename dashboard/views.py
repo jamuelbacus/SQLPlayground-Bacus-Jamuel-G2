@@ -12,10 +12,50 @@ from lessons.curriculum import LESSONS
 from lessons.engine import QueryError, run_query, schema_tables
 from lessons.models import LessonProgress
 
-from .forms import AdminUserCreateForm, AdminUserEditForm, SavedQueryForm
+from .forms import (
+    AdminUserCreateForm,
+    AdminUserEditForm,
+    SavedQueryForm,
+    SqlSubmissionForm,
+)
 from .models import QueryHistory, SavedQuery
 
 DEFAULT_SQL = "SELECT * FROM students ORDER BY student_id;"
+
+
+def _empty_result():
+    return {
+        "success": False,
+        "columns": [],
+        "rows": [],
+        "row_count": 0,
+        "truncated": False,
+        "error": "",
+        "message": "",
+    }
+
+
+def _error_result(message):
+    result = _empty_result()
+    result["error"] = message
+    result["message"] = "Your query could not run."
+    return result
+
+
+def _sandbox_context(request, *, sql=None, form=None, last_result=None):
+    """Build the sandbox page context for GET and invalid POST responses."""
+    if sql is None:
+        sql = request.GET.get("sql") or request.session.get("sandbox_sql") or DEFAULT_SQL
+    if last_result is None:
+        last_result = request.session.get("sandbox_result", _empty_result())
+    return {
+        "database_schema": schema_tables(),
+        "query_history": request.user.query_history.all()[:10],
+        "saved_queries": request.user.saved_queries.all()[:10],
+        "default_sql": sql,
+        "last_result": last_result,
+        "form": form or SqlSubmissionForm(initial={"sql": sql}),
+    }
 
 
 @login_required
@@ -56,31 +96,7 @@ def learner_dashboard(request):
 @role_required(CustomUser.Role.LEARNER)
 def sandbox(request):
     """Free SQL practice against the isolated sample database."""
-    default_sql = (
-        request.GET.get("sql")
-        or request.session.get("sandbox_sql")
-        or DEFAULT_SQL
-    )
-    last_result = request.session.get(
-        "sandbox_result",
-        {
-            "success": False,
-            "columns": [],
-            "rows": [],
-            "row_count": 0,
-            "truncated": False,
-            "error": "",
-            "message": "",
-        },
-    )
-    context = {
-        "database_schema": schema_tables(),
-        "query_history": request.user.query_history.all()[:10],
-        "saved_queries": request.user.saved_queries.all()[:10],
-        "default_sql": default_sql,
-        "last_result": last_result,
-    }
-    return render(request, "dashboard/sandbox.html", context)
+    return render(request, "dashboard/sandbox.html", _sandbox_context(request))
 
 
 @role_required(CustomUser.Role.LEARNER)
@@ -91,9 +107,29 @@ def sandbox_execute(request):
 
     sql = (request.POST.get("sql") or "").strip()
     request.session["sandbox_sql"] = sql
+    form = SqlSubmissionForm(request.POST)
+
+    if not form.is_valid():
+        error = form.errors["sql"][0] if "sql" in form.errors else "Please correct the SQL below."
+        last_result = _error_result(error)
+        QueryHistory.objects.create(
+            user=request.user,
+            sql=sql,
+            status="error",
+            error_message=error,
+        )
+        request.session["sandbox_result"] = last_result
+        messages.error(request, error)
+        return render(
+            request,
+            "dashboard/sandbox.html",
+            _sandbox_context(
+                request, sql=sql, form=form, last_result=last_result
+            ),
+        )
 
     try:
-        result = run_query(sql)
+        result = run_query(form.cleaned_data["sql"])
     except QueryError as exc:
         QueryHistory.objects.create(
             user=request.user,
@@ -101,15 +137,9 @@ def sandbox_execute(request):
             status="error",
             error_message=str(exc),
         )
-        request.session["sandbox_result"] = {
-            "success": False,
-            "columns": [],
-            "rows": [],
-            "row_count": 0,
-            "truncated": False,
-            "error": str(exc),
-            "message": "Your query could not run.",
-        }
+        last_result = _error_result(str(exc))
+        request.session["sandbox_result"] = last_result
+        messages.error(request, str(exc))
         return redirect("sandbox")
 
     QueryHistory.objects.create(
@@ -127,6 +157,7 @@ def sandbox_execute(request):
         "error": "",
         "message": "Query executed successfully.",
     }
+    messages.success(request, "Query executed successfully.")
     return redirect("sandbox")
 
 

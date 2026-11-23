@@ -122,6 +122,14 @@ class SandboxExecutionTests(TestCase):
 
         self.assertContains(response, "SELECT course_name FROM courses;")
 
+    def test_sql_submission_over_limit_is_rejected(self):
+        from dashboard.forms import SqlSubmissionForm
+
+        form = SqlSubmissionForm(data={"sql": "SELECT " + "x" * 6000})
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("sql", form.errors)
+
 
 class SavedQueryTests(TestCase):
     def setUp(self):

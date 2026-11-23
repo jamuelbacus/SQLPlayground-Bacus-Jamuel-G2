@@ -43,6 +43,11 @@
       <form method="post" action="{% url 'lesson_check' lesson.slug %}">
         {% csrf_token %}
         <label class="sr-only" for="lesson-sql">SQL query</label>
+        {% if form.sql.errors %}
+          {% for error in form.sql.errors %}
+            <p class="field-error">{{ error }}</p>
+          {% endfor %}
+        {% endif %}
         <textarea
           id="lesson-sql"
           name="sql"

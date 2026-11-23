@@ -15,6 +15,7 @@ from typing import NamedTuple
 MAX_ROWS = 200
 MAX_SECONDS = 1.0
 MAX_STEPS = 1_000_000
+MAX_SQL_LENGTH = 5000
 
 TABLE_NAMES = ("students", "courses", "enrollments")
 
@@ -144,13 +145,112 @@ def _first_keyword(sql: str) -> str:
     return cleaned.split(None, 1)[0].lower()
 
 
+def _sql_code(sql: str) -> str:
+    """Blank comments while preserving string literals and character positions."""
+    output = []
+    index = 0
+    state = "code"
+    while index < len(sql):
+        char = sql[index]
+        following = sql[index + 1] if index + 1 < len(sql) else ""
+
+        if state == "code":
+            if char == "-" and following == "-":
+                state = "line"
+                output.append("  ")
+                index += 2
+                continue
+            if char == "/" and following == "*":
+                state = "block"
+                output.append("  ")
+                index += 2
+                continue
+            if char == "'":
+                state = "single"
+            elif char == '"':
+                state = "double"
+            output.append(char)
+            index += 1
+            continue
+
+        if state == "line":
+            if char == "\n":
+                state = "code"
+                output.append("\n")
+            else:
+                output.append(" ")
+            index += 1
+            continue
+
+        if state == "block":
+            if char == "*" and following == "/":
+                state = "code"
+                output.append("  ")
+                index += 2
+                continue
+            output.append("\n" if char == "\n" else " ")
+            index += 1
+            continue
+
+        quote = "'" if state == "single" else '"'
+        if char == quote:
+            if following == quote:
+                output.append(char + following)
+                index += 2
+                continue
+            state = "code"
+        output.append(char)
+        index += 1
+    return "".join(output)
+
+
+def _skip_quoted(code: str, index: int, quote: str) -> int:
+    index += 1
+    while index < len(code):
+        if code[index] == quote:
+            if index + 1 < len(code) and code[index + 1] == quote:
+                index += 2
+                continue
+            return index + 1
+        index += 1
+    return index
+
+
+def _has_multiple_statements(sql: str, code: str) -> bool:
+    index = 0
+    while index < len(code):
+        char = code[index]
+        if char == "'":
+            index = _skip_quoted(code, index, "'")
+            continue
+        if char == '"':
+            index = _skip_quoted(code, index, '"')
+            continue
+        if char == ";" and sqlite3.complete_statement(sql[: index + 1]):
+            if code[index + 1 :].strip():
+                return True
+        index += 1
+    return False
+
+
+def validate_read_only_sql(sql: str) -> None:
+    """Check that learner SQL is one bounded, read-only statement."""
+    text = (sql or "").strip()
+    code = _sql_code(text).strip()
+    if not code:
+        raise QueryError("Please enter a SQL statement.")
+    if len(text) > MAX_SQL_LENGTH:
+        raise QueryError("SQL query is too long.")
+    if _first_keyword(text) not in {"select", "with"}:
+        raise QueryError("Only SELECT queries are allowed in the SQL playground.")
+    if _has_multiple_statements(text, code):
+        raise QueryError("Run one SQL statement at a time.")
+
+
 def run_query(sql: str) -> QueryResult:
     """Run one read-only practice query and return its result."""
     text = (sql or "").strip()
-    if not text:
-        raise QueryError("Please enter a SQL statement.")
-    if _first_keyword(text) not in {"select", "with"}:
-        raise QueryError("Only SELECT queries are allowed in the SQL playground.")
+    validate_read_only_sql(text)
 
     connection = _build_connection()
     try:

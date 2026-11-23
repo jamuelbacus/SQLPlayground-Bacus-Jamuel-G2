@@ -28,6 +28,11 @@
         <form method="post" action="{% url 'sandbox_execute' %}">
           {% csrf_token %}
           <label class="sr-only" for="sandbox-sql">SQL query</label>
+          {% if form.sql.errors %}
+            {% for error in form.sql.errors %}
+              <p class="field-error">{{ error }}</p>
+            {% endfor %}
+          {% endif %}
           <textarea
             id="sandbox-sql"
             name="sql"

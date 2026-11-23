@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 
 from accounts.models import CustomUser
-from lessons.engine import QueryError, run_query
+from lessons.engine import MAX_SQL_LENGTH, QueryError, validate_read_only_sql
 
 from .models import SavedQuery
 
@@ -91,7 +91,7 @@ class SavedQueryForm(forms.ModelForm):
     def clean_sql(self):
         sql = self.cleaned_data["sql"].strip()
         try:
-            run_query(sql)
+            validate_read_only_sql(sql)
         except QueryError as exc:
             raise forms.ValidationError(str(exc)) from exc
         return sql
@@ -102,3 +102,23 @@ class SavedQueryForm(forms.ModelForm):
         if commit:
             saved_query.save()
         return saved_query
+
+
+class SqlSubmissionForm(forms.Form):
+    """Validate SQL typed into the sandbox or a lesson editor."""
+
+    sql = forms.CharField(
+        strip=True,
+        max_length=MAX_SQL_LENGTH,
+        widget=forms.Textarea(
+            attrs={"class": "sql-editor", "rows": 12, "spellcheck": "false"}
+        ),
+    )
+
+    def clean_sql(self):
+        sql = self.cleaned_data["sql"]
+        try:
+            validate_read_only_sql(sql)
+        except QueryError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        return sql

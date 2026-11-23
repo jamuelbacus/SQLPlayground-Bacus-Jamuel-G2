@@ -1,9 +1,11 @@
+from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from accounts.decorators import role_required
 from accounts.models import CustomUser
+from dashboard.forms import SqlSubmissionForm
 
 from .curriculum import (
     LESSONS,
@@ -14,6 +16,40 @@ from .curriculum import (
 )
 from .engine import QueryError, results_match, run_query
 from .models import LessonProgress
+
+
+def _empty_result():
+    return {
+        "passed": False,
+        "message": "",
+        "columns": [],
+        "rows": [],
+        "row_count": 0,
+        "truncated": False,
+        "error": "",
+    }
+
+
+def _lesson_context(request, lesson, *, editor_sql=None, result=None, form=None):
+    """Build the lesson page context for GET and invalid POST responses."""
+    progress = LessonProgress.objects.filter(
+        user=request.user, lesson_slug=lesson.slug
+    ).first()
+    if editor_sql is None:
+        editor_sql = request.session.get(
+            f"lesson_sql_{lesson.slug}", lesson.starter_sql
+        )
+    if result is None:
+        result = request.session.get(f"lesson_result_{lesson.slug}")
+    return {
+        "lesson": lesson,
+        "editor_sql": editor_sql,
+        "result": result,
+        "completed": bool(progress and progress.completed_at),
+        "attempts": progress.attempts if progress else 0,
+        "next_lesson": next_lesson(lesson),
+        "form": form or SqlSubmissionForm(initial={"sql": editor_sql}),
+    }
 
 
 def _progress_state(user):
@@ -71,23 +107,8 @@ def lesson_detail(request, slug):
     if lesson is None:
         raise Http404("Lesson not found")
 
-    progress = LessonProgress.objects.filter(
-        user=request.user, lesson_slug=slug
-    ).first()
-
     return render(
-        request,
-        "lessons/detail.html",
-        {
-            "lesson": lesson,
-            "editor_sql": request.session.get(
-                f"lesson_sql_{slug}", lesson.starter_sql
-            ),
-            "result": request.session.get(f"lesson_result_{slug}"),
-            "completed": bool(progress and progress.completed_at),
-            "attempts": progress.attempts if progress else 0,
-            "next_lesson": next_lesson(lesson),
-        },
+        request, "lessons/detail.html", _lesson_context(request, lesson)
     )
 
 
@@ -101,6 +122,7 @@ def lesson_check(request, slug):
 
     sql = (request.POST.get("sql") or "").strip()
     request.session[f"lesson_sql_{slug}"] = sql
+    form = SqlSubmissionForm(request.POST)
 
     progress, _ = LessonProgress.objects.get_or_create(
         user=request.user, lesson_slug=slug
@@ -108,18 +130,24 @@ def lesson_check(request, slug):
     progress.attempts += 1
     progress.save(update_fields=["attempts", "updated_at"])
 
-    result = {
-        "passed": False,
-        "message": "",
-        "columns": [],
-        "rows": [],
-        "row_count": 0,
-        "truncated": False,
-        "error": "",
-    }
+    result = _empty_result()
+
+    if not form.is_valid():
+        error = form.errors["sql"][0] if "sql" in form.errors else "Please correct the SQL below."
+        result["message"] = "Your query could not run."
+        result["error"] = error
+        request.session[f"lesson_result_{slug}"] = result
+        messages.error(request, error)
+        return render(
+            request,
+            "lessons/detail.html",
+            _lesson_context(
+                request, lesson, editor_sql=sql, result=result, form=form
+            ),
+        )
 
     try:
-        actual = run_query(sql)
+        actual = run_query(form.cleaned_data["sql"])
         expected = run_query(lesson.reference_sql)
         passed = results_match(actual, expected, lesson.ordered)
         result.update(
@@ -137,12 +165,15 @@ def lesson_check(request, slug):
                 "truncated": actual.truncated,
             }
         )
-        if passed and progress.completed_at is None:
-            progress.completed_at = timezone.now()
-            progress.save(update_fields=["completed_at", "updated_at"])
+        if passed:
+            messages.success(request, lesson.success_message)
+            if progress.completed_at is None:
+                progress.completed_at = timezone.now()
+                progress.save(update_fields=["completed_at", "updated_at"])
     except QueryError as exc:
         result["message"] = "Your query could not run."
         result["error"] = str(exc)
+        messages.error(request, str(exc))
 
     request.session[f"lesson_result_{slug}"] = result
     return redirect("lesson_detail", slug=slug)
