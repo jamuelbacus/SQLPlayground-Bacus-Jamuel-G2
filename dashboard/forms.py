@@ -2,6 +2,9 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 
 from accounts.models import CustomUser
+from lessons.engine import QueryError, run_query
+
+from .models import SavedQuery
 
 
 class AdminUserCreateForm(UserCreationForm):
@@ -59,3 +62,43 @@ class AdminUserEditForm(forms.ModelForm):
         for field in self.fields.values():
             if field.widget.input_type != "checkbox":
                 field.widget.attrs.setdefault("class", "form-input")
+
+
+class SavedQueryForm(forms.ModelForm):
+    """Create or edit a learner's saved query with server-side validation."""
+
+    class Meta:
+        model = SavedQuery
+        fields = ("title", "sql")
+        widgets = {
+            "title": forms.TextInput(attrs={"class": "form-input"}),
+            "sql": forms.Textarea(attrs={"class": "sql-editor", "rows": 12}),
+        }
+
+    def __init__(self, data=None, *, user, instance=None):
+        super().__init__(data=data, instance=instance)
+        self.user = user
+
+    def clean_title(self):
+        title = self.cleaned_data["title"].strip()
+        duplicates = SavedQuery.objects.filter(user=self.user, title__iexact=title)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise forms.ValidationError("You already have a saved query with this title.")
+        return title
+
+    def clean_sql(self):
+        sql = self.cleaned_data["sql"].strip()
+        try:
+            run_query(sql)
+        except QueryError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        return sql
+
+    def save(self, commit=True):
+        saved_query = super().save(commit=False)
+        saved_query.user = self.user
+        if commit:
+            saved_query.save()
+        return saved_query

@@ -12,16 +12,9 @@
   </section>
 
   <div class="card form-card">
-    <form method="post">
+    <form method="post" novalidate>
       {% csrf_token %}
-      <div class="field-group">
-        <label for="title">Query title</label>
-        <input id="title" type="text" name="title" value="{{ saved_query.title|default:'' }}" required>
-      </div>
-      <div class="field-group">
-        <label for="sql">SQL</label>
-        <textarea id="sql" name="sql" rows="12" required>{{ saved_query.sql|default:'' }}</textarea>
-      </div>
+      {% include "partials/form_fields.html" with form=form %}
       <div class="editor-actions">
         <button type="submit" class="button primary">Save query</button>
         <a href="{% url 'saved_query_list' %}" class="button secondary">Cancel</a>

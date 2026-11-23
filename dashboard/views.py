@@ -12,7 +12,7 @@ from lessons.curriculum import LESSONS
 from lessons.engine import QueryError, run_query, schema_tables
 from lessons.models import LessonProgress
 
-from .forms import AdminUserCreateForm, AdminUserEditForm
+from .forms import AdminUserCreateForm, AdminUserEditForm, SavedQueryForm
 from .models import QueryHistory, SavedQuery
 
 DEFAULT_SQL = "SELECT * FROM students ORDER BY student_id;"
@@ -141,20 +141,21 @@ def saved_query_list(request):
 
 @role_required(CustomUser.Role.LEARNER)
 def saved_query_create(request):
-    if request.method == "POST":
-        title = (request.POST.get("title") or "").strip()
-        sql = (request.POST.get("sql") or "").strip()
-        if not title:
-            messages.error(request, "A title is required for saving a query.")
-            return redirect("saved_query_list")
-        saved_query = SavedQuery.objects.create(user=request.user, title=title, sql=sql)
+    form = SavedQueryForm(
+        request.POST if request.method == "POST" else None,
+        user=request.user,
+    )
+    if request.method == "POST" and form.is_valid():
+        saved_query = form.save()
         messages.success(request, f"Saved query '{saved_query.title}' was created.")
         return redirect("saved_query_detail", pk=saved_query.pk)
+    if request.method == "POST":
+        messages.error(request, "Please correct the errors below.")
 
     return render(
         request,
         "dashboard/saved_query_form.html",
-        {"page_title": "Save Query", "saved_query": None},
+        {"page_title": "Save Query", "saved_query": None, "form": form},
     )
 
 
@@ -167,20 +168,22 @@ def saved_query_detail(request, pk):
 @role_required(CustomUser.Role.LEARNER)
 def saved_query_edit(request, pk):
     saved_query = get_object_or_404(SavedQuery, pk=pk, user=request.user)
+    form = SavedQueryForm(
+        request.POST if request.method == "POST" else None,
+        user=request.user,
+        instance=saved_query,
+    )
+    if request.method == "POST" and form.is_valid():
+        saved_query = form.save()
+        messages.success(request, f"Saved query '{saved_query.title}' was updated.")
+        return redirect("saved_query_detail", pk=saved_query.pk)
     if request.method == "POST":
-        saved_query.title = (request.POST.get("title") or "").strip()
-        saved_query.sql = (request.POST.get("sql") or "").strip()
-        if not saved_query.title:
-            messages.error(request, "A title is required for saving a query.")
-        else:
-            saved_query.save()
-            messages.success(request, f"Saved query '{saved_query.title}' was updated.")
-            return redirect("saved_query_detail", pk=saved_query.pk)
+        messages.error(request, "Please correct the errors below.")
 
     return render(
         request,
         "dashboard/saved_query_form.html",
-        {"page_title": "Edit Query", "saved_query": saved_query},
+        {"page_title": "Edit Query", "saved_query": saved_query, "form": form},
     )
 
 
