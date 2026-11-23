@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      {% include "partials/brand.html" %}
+      <p class="eyebrow">404</p>
+      <h1>Page not found</h1>
+      <p class="lead">We could not find that page.</p>
+    </div>
+  </section>
+
+  <div class="card">
+    <p>The page you requested is not available. Check the address or return home.</p>
+    <a href="{% url 'home' %}" class="button primary">Back to home</a>
+  </div>
+{% endblock %}

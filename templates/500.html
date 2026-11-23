@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Server error | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      {% include "partials/brand.html" %}
+      <p class="eyebrow">500</p>
+      <h1>Server error</h1>
+      <p class="lead">Something went wrong. Please try again.</p>
+    </div>
+  </section>
+
+  <div class="card">
+    <p>If the problem continues, return home and start again.</p>
+    <a href="{% url 'home' %}" class="button primary">Back to home</a>
+  </div>
+{% endblock %}
