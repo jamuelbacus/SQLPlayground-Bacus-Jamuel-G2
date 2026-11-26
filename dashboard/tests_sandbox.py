@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from lessons.tests_engine import AUTHORIZER_REJECTION, CTE_WRITE_STATEMENTS, DIRECT_WRITE_STATEMENTS, STABLE_REJECTION, TRIGGER_SQL
+
 from .models import QueryHistory, SavedQuery
 
 User = get_user_model()
@@ -176,3 +178,66 @@ class SavedQueryTests(TestCase):
 
         self.assertRedirects(response, reverse("saved_query_list"))
         self.assertFalse(SavedQuery.objects.exists())
+
+
+class SandboxWriteRejectionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_direct_write_verbs_are_rejected_by_sandbox_view(self):
+        for sql in DIRECT_WRITE_STATEMENTS:
+            with self.subTest(sql=sql):
+                QueryHistory.objects.all().delete()
+
+                response = self.client.post(
+                    reverse("sandbox_execute"),
+                    {"sql": sql},
+                    follow=True,
+                )
+
+                result = response.context["last_result"]
+                self.assertFalse(result["success"])
+                self.assertEqual(result["error"], STABLE_REJECTION)
+
+                history = QueryHistory.objects.get(user=self.learner)
+                self.assertEqual(history.status, "error")
+                self.assertEqual(history.error_message, STABLE_REJECTION)
+
+    def test_cte_wrapped_writes_are_rejected_by_sandbox_view(self):
+        for sql in CTE_WRITE_STATEMENTS:
+            with self.subTest(sql=sql):
+                QueryHistory.objects.all().delete()
+
+                response = self.client.post(
+                    reverse("sandbox_execute"),
+                    {"sql": sql},
+                    follow=True,
+                )
+
+                result = response.context["last_result"]
+                self.assertFalse(result["success"])
+                self.assertEqual(result["error"], AUTHORIZER_REJECTION)
+
+                history = QueryHistory.objects.get(user=self.learner)
+                self.assertEqual(history.status, "error")
+                self.assertEqual(history.error_message, AUTHORIZER_REJECTION)
+
+    def test_rejected_sql_is_escaped_in_sandbox_response(self):
+        sql = TRIGGER_SQL + " <script>alert(1)</script>"
+        QueryHistory.objects.all().delete()
+
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": sql},
+            follow=True,
+        )
+
+        result = response.context["last_result"]
+        self.assertEqual(result["error"], STABLE_REJECTION)
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
