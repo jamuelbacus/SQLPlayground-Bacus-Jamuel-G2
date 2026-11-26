@@ -420,3 +420,30 @@ class InactiveSessionAccessTests(TestCase):
 
         self.client.force_login(self.administrator)
         self.assertEqual(self.client.get(reverse("manage_users")).status_code, 200)
+
+    def test_deactivated_user_is_redirected_from_direct_login_pages(self):
+        for url in (
+            reverse("dashboard"),
+            reverse("profile"),
+            reverse("profile_edit"),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.learner)
+
+    def test_deactivated_learner_cannot_post_to_sandbox_or_lesson_check(self):
+        for url, data in (
+            (reverse("sandbox_execute"), {"sql": "SELECT 1"}),
+            (reverse("lesson_check", args=["select-columns"]), {"sql": "SELECT 1"}),
+        ):
+            with self.subTest(url=url):
+                self.client.force_login(self.learner)
+                User.objects.filter(pk=self.learner.pk).update(is_active=False)
+
+                response = self.client.post(url, data, follow=True)
+
+                self.assertEqual(response.redirect_chain[0][0], self.login_url)
+                self.assertContains(response, INACTIVE_ACCOUNT_MESSAGE)
+                self.assertNotIn("_auth_user_id", self.client.session)
+
+        self.assertFalse(QueryHistory.objects.exists())
+        self.assertFalse(LessonProgress.objects.exists())

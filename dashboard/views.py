@@ -6,7 +6,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
-from accounts.decorators import role_required
+from accounts.decorators import active_required, role_required
 from accounts.models import CustomUser
 from lessons.curriculum import LESSONS
 from lessons.engine import QueryError, run_query, schema_tables
@@ -18,6 +18,7 @@ from .models import QueryHistory, SavedQuery
 DEFAULT_SQL = "SELECT * FROM students ORDER BY student_id;"
 
 
+@active_required
 @login_required
 def dashboard_redirect(request):
     """Send each user to the dashboard that belongs to their role."""
