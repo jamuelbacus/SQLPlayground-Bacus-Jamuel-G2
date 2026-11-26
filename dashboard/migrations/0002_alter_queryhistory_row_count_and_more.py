@@ -3,6 +3,32 @@
 import django.db.models.functions.text
 from django.conf import settings
 from django.db import migrations, models
+from django.db.models import Count
+from django.db.models.functions import Lower
+
+
+def deduplicate_saved_queries(apps, schema_editor):
+    """Keep the newest saved query for each user and case-insensitive title."""
+    SavedQuery = apps.get_model("dashboard", "SavedQuery")
+    db_alias = schema_editor.connection.alias
+    duplicate_groups = (
+        SavedQuery.objects.using(db_alias)
+        .values("user_id")
+        .annotate(normalized_title=Lower("title"), total=Count("id"))
+        .filter(total__gt=1)
+    )
+
+    for group in duplicate_groups:
+        rows = list(
+            SavedQuery.objects.using(db_alias)
+            .filter(user_id=group["user_id"])
+            .annotate(normalized_title=Lower("title"))
+            .filter(normalized_title=group["normalized_title"])
+            .order_by("-updated_at", "-pk")
+        )
+        duplicate_ids = [row.pk for row in rows[1:]]
+        if duplicate_ids:
+            SavedQuery.objects.using(db_alias).filter(pk__in=duplicate_ids).delete()
 
 
 class Migration(migrations.Migration):
@@ -30,6 +56,7 @@ class Migration(migrations.Migration):
             model_name='queryhistory',
             constraint=models.CheckConstraint(condition=models.Q(('status__in', ('success', 'error'))), name='queryhistory_status_valid'),
         ),
+        migrations.RunPython(deduplicate_saved_queries, migrations.RunPython.noop),
         migrations.AddConstraint(
             model_name='savedquery',
             constraint=models.UniqueConstraint(models.F('user'), django.db.models.functions.text.Lower('title'), name='savedquery_user_title_ci_uniq'),

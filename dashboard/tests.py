@@ -1,8 +1,13 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.contrib.messages import get_messages
+from django.db import IntegrityError, connection, transaction
+from django.db.migrations.executor import MigrationExecutor
 from django.db.models import PositiveIntegerField
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import QueryHistory, SavedQuery
 
@@ -343,6 +348,11 @@ class SavedQueryConstraintTests(TestCase):
         )
 
         self.assertEqual(index.fields, ["user", "-updated_at", "-created_at"])
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, SavedQuery._meta.db_table
+            )
+        self.assertIn("savedquery_user_recent_idx", constraints)
 
 
 class QueryHistoryConstraintTests(TestCase):
@@ -395,3 +405,109 @@ class QueryHistoryConstraintTests(TestCase):
         )
 
         self.assertEqual(index.fields, ["user", "-executed_at"])
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, QueryHistory._meta.db_table
+            )
+        self.assertIn("queryhistory_user_recent_idx", constraints)
+
+
+class SavedQueryDuplicateHandlingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="duplicate-owner",
+            email="duplicate-owner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.existing = SavedQuery.objects.create(
+            user=self.user,
+            title="Top Students",
+            sql="SELECT first_name FROM students;",
+        )
+        self.client.force_login(self.user)
+
+    def messages_text(self, response):
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def test_create_with_duplicate_title_shows_error_instead_of_crashing(self):
+        response = self.client.post(
+            reverse("saved_query_create"),
+            {"title": "top students", "sql": "SELECT last_name FROM students;"},
+        )
+
+        self.assertRedirects(response, reverse("saved_query_list"))
+        self.assertTrue(
+            any("already exists" in text for text in self.messages_text(response))
+        )
+        self.assertEqual(SavedQuery.objects.filter(user=self.user).count(), 1)
+
+    def test_edit_to_duplicate_title_shows_error_and_keeps_original(self):
+        other = SavedQuery.objects.create(
+            user=self.user,
+            title="Other Query",
+            sql="SELECT 1;",
+        )
+
+        response = self.client.post(
+            reverse("saved_query_edit", args=[other.pk]),
+            {"title": "TOP STUDENTS", "sql": "SELECT 2;"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("already exists" in text for text in self.messages_text(response))
+        )
+        other.refresh_from_db()
+        self.assertEqual(other.title, "Other Query")
+        self.assertEqual(other.sql, "SELECT 1;")
+        self.existing.refresh_from_db()
+        self.assertEqual(self.existing.title, "Top Students")
+
+
+class SavedQueryMigrationIntegrityTests(TransactionTestCase):
+    migrate_from = [("dashboard", "0001_initial")]
+    migrate_to = [
+        ("dashboard", "0002_alter_queryhistory_row_count_and_more")
+    ]
+
+    def setUp(self):
+        executor = MigrationExecutor(connection)
+        self.latest_nodes = executor.loader.graph.leaf_nodes()
+        self.addCleanup(self.restore_latest_migrations)
+        executor.migrate(self.migrate_from)
+        self.apps_before = executor.loader.project_state(self.migrate_from).apps
+        super().setUp()
+
+    def restore_latest_migrations(self):
+        MigrationExecutor(connection).migrate(self.latest_nodes)
+
+    def test_deduplicates_existing_case_variant_titles(self):
+        User = self.apps_before.get_model("accounts", "CustomUser")
+        SavedQuery = self.apps_before.get_model("dashboard", "SavedQuery")
+        user = User.objects.create_user(
+            username="legacy-owner",
+            email="legacy-owner@example.com",
+            password="Str0ngPass!234",
+        )
+        older = SavedQuery.objects.create(
+            user=user, title="Top Students", sql="SELECT old;"
+        )
+        newer = SavedQuery.objects.create(
+            user=user, title="top students", sql="SELECT new;"
+        )
+        SavedQuery.objects.filter(pk=older.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=5)
+        )
+        SavedQuery.objects.filter(pk=newer.pk).update(updated_at=timezone.now())
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.migrate_to)
+
+        SavedQueryAfter = (
+            executor.loader.project_state(self.migrate_to)
+            .apps.get_model("dashboard", "SavedQuery")
+        )
+        rows = list(SavedQueryAfter.objects.filter(user_id=user.pk))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].sql, "SELECT new;")

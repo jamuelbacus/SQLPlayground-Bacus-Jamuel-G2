@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
@@ -439,3 +439,8 @@ class LessonProgressIntegrityTests(TestCase):
         )
 
         self.assertEqual(index.fields, ["user", "completed_at"])
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, LessonProgress._meta.db_table
+            )
+        self.assertIn("lessonprogress_done_idx", constraints)

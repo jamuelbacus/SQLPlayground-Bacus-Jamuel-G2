@@ -3,7 +3,7 @@ import tempfile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -378,3 +378,8 @@ class UserRoleConstraintTests(TestCase):
         )
 
         self.assertEqual(index.fields, ["role", "is_active"])
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, User._meta.db_table
+            )
+        self.assertIn("customuser_role_active_idx", constraints)
