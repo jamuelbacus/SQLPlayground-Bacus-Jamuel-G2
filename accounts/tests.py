@@ -6,6 +6,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
+from dashboard.models import QueryHistory, SavedQuery
+from lessons.models import LessonProgress
+
 User = get_user_model()
 
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
@@ -346,3 +350,73 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+
+class InactiveSessionAccessTests(TestCase):
+    def setUp(self):
+        self.login_url = reverse("login")
+        self.learner = User.objects.create_user(
+            username="inactive-learner",
+            email="inactive-learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.administrator = User.objects.create_user(
+            username="inactive-admin",
+            email="inactive-admin@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.target = User.objects.create_user(
+            username="target",
+            email="target@example.com",
+            password="Str0ngPass!234",
+        )
+        self.saved_query = SavedQuery.objects.create(
+            user=self.learner,
+            title="All students",
+            sql="SELECT * FROM students",
+        )
+
+    def assert_inactive_redirect(self, url, user):
+        self.client.force_login(user)
+        User.objects.filter(pk=user.pk).update(is_active=False)
+
+        response = self.client.get(url, follow=True)
+
+        self.assertEqual(response.redirect_chain[0][0], self.login_url)
+        self.assertContains(response, INACTIVE_ACCOUNT_MESSAGE)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_deactivated_learner_is_redirected_from_role_protected_pages(self):
+        for url in (
+            reverse("learner_dashboard"),
+            reverse("sandbox"),
+            reverse("saved_query_list"),
+            reverse("saved_query_create"),
+            reverse("saved_query_detail", args=[self.saved_query.pk]),
+            reverse("saved_query_edit", args=[self.saved_query.pk]),
+            reverse("saved_query_delete", args=[self.saved_query.pk]),
+            reverse("lesson_index"),
+            reverse("lesson_detail", args=["select-columns"]),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.learner)
+
+    def test_deactivated_administrator_is_redirected_from_user_management(self):
+        for url in (
+            reverse("administrator_dashboard"),
+            reverse("manage_users"),
+            reverse("user_create"),
+            reverse("user_edit", args=[self.target.pk]),
+            reverse("user_password", args=[self.target.pk]),
+            reverse("user_delete", args=[self.target.pk]),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.administrator)
+
+    def test_active_users_keep_their_existing_access(self):
+        self.client.force_login(self.learner)
+        self.assertEqual(self.client.get(reverse("sandbox")).status_code, 200)
+
+        self.client.force_login(self.administrator)
+        self.assertEqual(self.client.get(reverse("manage_users")).status_code, 200)
