@@ -3,6 +3,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AdminPasswordChangeForm
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -95,12 +96,13 @@ def sandbox_execute(request):
     try:
         result = run_query(sql)
     except QueryError as exc:
-        QueryHistory.objects.create(
-            user=request.user,
-            sql=sql,
-            status="error",
-            error_message=str(exc),
-        )
+        with transaction.atomic():
+            QueryHistory.objects.create(
+                user=request.user,
+                sql=sql,
+                status="error",
+                error_message=str(exc),
+            )
         request.session["sandbox_result"] = {
             "success": False,
             "columns": [],
@@ -112,12 +114,13 @@ def sandbox_execute(request):
         }
         return redirect("sandbox")
 
-    QueryHistory.objects.create(
-        user=request.user,
-        sql=sql,
-        status="success",
-        row_count=len(result.rows),
-    )
+    with transaction.atomic():
+        QueryHistory.objects.create(
+            user=request.user,
+            sql=sql,
+            status="success",
+            row_count=len(result.rows),
+        )
     request.session["sandbox_result"] = {
         "success": True,
         "columns": result.columns,
@@ -147,8 +150,13 @@ def saved_query_create(request):
         if not title:
             messages.error(request, "A title is required for saving a query.")
             return redirect("saved_query_list")
-        saved_query = SavedQuery.objects.create(user=request.user, title=title, sql=sql)
-        messages.success(request, f"Saved query '{saved_query.title}' was created.")
+        with transaction.atomic():
+            saved_query = SavedQuery.objects.create(
+                user=request.user, title=title, sql=sql
+            )
+            messages.success(
+                request, f"Saved query '{saved_query.title}' was created."
+            )
         return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
@@ -173,8 +181,11 @@ def saved_query_edit(request, pk):
         if not saved_query.title:
             messages.error(request, "A title is required for saving a query.")
         else:
-            saved_query.save()
-            messages.success(request, f"Saved query '{saved_query.title}' was updated.")
+            with transaction.atomic():
+                saved_query.save()
+                messages.success(
+                    request, f"Saved query '{saved_query.title}' was updated."
+                )
             return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
@@ -298,18 +309,22 @@ def user_edit(request, pk):
         if form.is_valid():
             new_role = form.cleaned_data["role"]
             new_active = form.cleaned_data["is_active"]
-            removes_last_admin = (
-                target.is_administrator
-                and (new_role != CustomUser.Role.ADMINISTRATOR or not new_active)
-                and _is_last_active_administrator(target)
-            )
-            if removes_last_admin:
-                form.add_error(
-                    None, "At least one active administrator must remain."
+            with transaction.atomic():
+                removes_last_admin = (
+                    target.is_administrator
+                    and (new_role != CustomUser.Role.ADMINISTRATOR or not new_active)
+                    and _is_last_active_administrator(target)
                 )
-            else:
-                form.save()
-                messages.success(request, f"Account {target.username} was updated.")
+                if removes_last_admin:
+                    form.add_error(
+                        None, "At least one active administrator must remain."
+                    )
+                else:
+                    form.save()
+                    messages.success(
+                        request, f"Account {target.username} was updated."
+                    )
+            if not removes_last_admin:
                 return redirect("manage_users")
         messages.error(request, "Please correct the errors below.")
     else:
@@ -334,10 +349,13 @@ def user_password(request, pk):
     if request.method == "POST":
         form = AdminPasswordChangeForm(target, request.POST)
         if form.is_valid():
-            form.save()
-            if target.pk == request.user.pk:
-                update_session_auth_hash(request, target)
-            messages.success(request, f"Password for {target.username} was changed.")
+            with transaction.atomic():
+                form.save()
+                if target.pk == request.user.pk:
+                    update_session_auth_hash(request, target)
+                messages.success(
+                    request, f"Password for {target.username} was changed."
+                )
             return redirect("user_edit", pk=target.pk)
         messages.error(request, "Please correct the errors below.")
     else:
@@ -360,14 +378,15 @@ def user_delete(request, pk):
         return redirect("manage_users")
 
     if request.method == "POST":
-        if _is_last_active_administrator(target):
-            messages.error(
-                request, "At least one active administrator must remain."
-            )
-            return redirect("user_delete", pk=target.pk)
-        username = target.username
-        target.delete()
-        messages.success(request, f"Account {username} was deleted.")
+        with transaction.atomic():
+            if _is_last_active_administrator(target):
+                messages.error(
+                    request, "At least one active administrator must remain."
+                )
+                return redirect("user_delete", pk=target.pk)
+            username = target.username
+            target.delete()
+            messages.success(request, f"Account {username} was deleted.")
         return redirect("manage_users")
 
     return render(
