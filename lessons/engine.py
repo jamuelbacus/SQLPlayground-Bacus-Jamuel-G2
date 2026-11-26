@@ -214,6 +214,10 @@ def run_query(sql: str) -> QueryResult:
                 return 1
             return 0
 
+        # The progress handler runs between SQLite VM steps, so it cannot stop
+        # work performed inside a single C-level function call. The authorizer's
+        # function allowlist is what keeps expensive helpers (readfile,
+        # writefile, randomblob, zeroblob, and future additions) unreachable.
         connection.set_progress_handler(guard, 1000)
 
         try:
