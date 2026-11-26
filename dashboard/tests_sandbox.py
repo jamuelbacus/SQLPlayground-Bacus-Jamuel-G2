@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
+
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 from .models import QueryHistory, SavedQuery
 
@@ -176,3 +178,46 @@ class SavedQueryTests(TestCase):
 
         self.assertRedirects(response, reverse("saved_query_list"))
         self.assertFalse(SavedQuery.objects.exists())
+
+
+class SandboxCsrfTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.learner = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+        self.sql = "SELECT first_name FROM students;"
+
+    def test_execute_rejects_post_without_token(self):
+        response = self.client.post(
+            reverse("sandbox_execute"), {"sql": self.sql}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_rejects_invalid_token(self):
+        token = csrf_token_from_response(self.client.get(reverse("sandbox")))
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": self.sql, "csrfmiddlewaretoken": f"invalid-{token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_accepts_valid_token(self):
+        response = post_with_csrf_token(
+            self.client,
+            reverse("sandbox"),
+            reverse("sandbox_execute"),
+            {"sql": self.sql},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        history = QueryHistory.objects.get(user=self.learner)
+        self.assertEqual(history.status, "success")
+        self.assertEqual(QueryHistory.objects.count(), 1)
