@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from dashboard.forms import AdminUserCreateForm, AdminUserEditForm
+
 User = get_user_model()
 
 
@@ -293,3 +295,95 @@ class UserManagementTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
+
+
+class AdminUserFormUniquenessTests(TestCase):
+    def setUp(self):
+        self.target = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.other = User.objects.create_user(
+            username="admin1",
+            email="admin1@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.create_data = {
+            "username": "newuser",
+            "first_name": "New",
+            "last_name": "User",
+            "email": "newuser@example.com",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+            "password1": "Str0ngPass!234",
+            "password2": "Str0ngPass!234",
+        }
+        self.edit_data = {
+            "username": "learner1",
+            "first_name": "Learner",
+            "last_name": "One",
+            "email": "learner1@example.com",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+        }
+
+    def test_create_form_rejects_case_variant_username(self):
+        form = AdminUserCreateForm({**self.create_data, "username": "ADMIN1"})
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["username"], ["This username is already taken."]
+        )
+
+    def test_create_form_rejects_case_variant_email(self):
+        form = AdminUserCreateForm(
+            {**self.create_data, "email": "ADMIN1@example.com"}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["email"],
+            ["An account with this email address already exists."],
+        )
+
+    def test_create_form_accepts_a_new_email(self):
+        form = AdminUserCreateForm(self.create_data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_edit_form_rejects_case_variant_username(self):
+        form = AdminUserEditForm(
+            {**self.edit_data, "username": "ADMIN1"}, instance=self.target
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["username"], ["This username is already taken."]
+        )
+
+    def test_edit_form_rejects_case_variant_email(self):
+        form = AdminUserEditForm(
+            {**self.edit_data, "email": "ADMIN1@example.com"},
+            instance=self.target,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["email"],
+            ["An account with this email address already exists."],
+        )
+
+    def test_edit_form_allows_the_accounts_own_case_variant_identifiers(self):
+        form = AdminUserEditForm(
+            {
+                **self.edit_data,
+                "username": "LEARNER1",
+                "email": "LEARNER1@example.com",
+            },
+            instance=self.target,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["email"], "learner1@example.com")
