@@ -435,7 +435,7 @@ class LessonProgressIntegrityTests(TestCase):
         index = next(
             index
             for index in LessonProgress._meta.indexes
-            if index.name == "lessonprogress_user_completed_idx"
+            if index.name == "lessonprogress_done_idx"
         )
 
         self.assertEqual(index.fields, ["user", "completed_at"])
