@@ -1,16 +1,8 @@
-import threading
 from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
-from django.test import (
-    Client,
-    SimpleTestCase,
-    TestCase,
-    TransactionTestCase,
-    override_settings,
-)
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
@@ -450,39 +442,38 @@ class LessonCheckTransactionTests(TestCase):
         self.assertEqual(progress.attempts, 1)
 
 
-@override_settings(SESSION_ENGINE="django.contrib.sessions.backends.signed_cookies")
-class LessonCheckConcurrencyTests(TransactionTestCase):
+class LessonCheckConcurrencyTests(TestCase):
     def setUp(self):
         self.learner = User.objects.create_user(
             username="concurrent-learner",
             email="concurrent-learner@example.com",
             password="Str0ngPass!234",
         )
+        self.client.force_login(self.learner)
 
     def test_concurrent_checks_keep_all_attempts(self):
-        self.client.force_login(self.learner)
-        session_cookie = self.client.cookies[settings.SESSION_COOKIE_NAME].value
-        url = reverse("lesson_check", args=["select-columns"])
-        barrier = threading.Barrier(4)
-        errors = []
-
-        def submit_check():
-            client = Client()
-            client.cookies[settings.SESSION_COOKIE_NAME] = session_cookie
-            barrier.wait()
-            try:
-                client.post(url, {"sql": "SELECT 1;"})
-            except Exception as exc:  # pragma: no cover - diagnostic in failure output
-                errors.append(exc)
-
-        threads = [threading.Thread(target=submit_check) for _ in range(4)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        self.assertEqual(errors, [])
-        progress = LessonProgress.objects.get(
-            user=self.learner, lesson_slug="select-columns"
+        progress = LessonProgress.objects.create(
+            user=self.learner,
+            lesson_slug="select-columns",
+            attempts=1,
         )
-        self.assertEqual(progress.attempts, 4)
+        stale_progress = LessonProgress.objects.get(pk=progress.pk)
+
+        def concurrent_write(*args, **kwargs):
+            # Another request advances the row after our instance was read.
+            LessonProgress.objects.filter(pk=progress.pk).update(
+                attempts=2, updated_at=timezone.now()
+            )
+            return stale_progress, False
+
+        with patch(
+            "lessons.views.LessonProgress.objects.get_or_create",
+            side_effect=concurrent_write,
+        ):
+            self.client.post(
+                reverse("lesson_check", args=["select-columns"]),
+                {"sql": "SELECT 1;"},
+            )
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.attempts, 3)
