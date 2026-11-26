@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
@@ -401,3 +401,41 @@ class LessonViewTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
+
+
+class LessonProgressIntegrityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="integrity-learner",
+            email="integrity-learner@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def test_unknown_lesson_slug_is_rejected_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                LessonProgress.objects.create(
+                    user=self.user,
+                    lesson_slug="not-a-lesson",
+                )
+
+    def test_every_curriculum_slug_is_accepted(self):
+        for lesson in LESSONS:
+            with self.subTest(lesson=lesson.slug):
+                LessonProgress.objects.create(
+                    user=self.user,
+                    lesson_slug=lesson.slug,
+                )
+
+        self.assertEqual(
+            LessonProgress.objects.filter(user=self.user).count(), len(LESSONS)
+        )
+
+    def test_completed_progress_index_is_declared(self):
+        index = next(
+            index
+            for index in LessonProgress._meta.indexes
+            if index.name == "lessonprogress_user_completed_idx"
+        )
+
+        self.assertEqual(index.fields, ["user", "completed_at"])

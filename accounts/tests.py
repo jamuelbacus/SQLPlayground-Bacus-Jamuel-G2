@@ -3,6 +3,7 @@ import tempfile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -346,3 +347,34 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+
+class UserRoleConstraintTests(TestCase):
+    def test_invalid_role_is_rejected_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                User.objects.create_user(
+                    username="invalid-role",
+                    email="invalid-role@example.com",
+                    password="Str0ngPass!234",
+                    role="GUEST",
+                )
+
+    def test_allowed_roles_are_accepted(self):
+        for role in User.Role.values:
+            with self.subTest(role=role):
+                User.objects.create_user(
+                    username=f"role-{role.lower()}",
+                    email=f"{role.lower()}@example.com",
+                    password="Str0ngPass!234",
+                    role=role,
+                )
+
+    def test_role_and_active_index_is_declared(self):
+        index = next(
+            index
+            for index in User._meta.indexes
+            if index.name == "customuser_role_active_idx"
+        )
+
+        self.assertEqual(index.fields, ["role", "is_active"])

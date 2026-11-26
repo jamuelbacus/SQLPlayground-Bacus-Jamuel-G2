@@ -1,6 +1,10 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models import PositiveIntegerField
 from django.test import TestCase
 from django.urls import reverse
+
+from .models import QueryHistory, SavedQuery
 
 User = get_user_model()
 
@@ -293,3 +297,101 @@ class UserManagementTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
+
+
+class SavedQueryConstraintTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="saved-owner",
+            email="saved-owner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.other_user = User.objects.create_user(
+            username="other-owner",
+            email="other-owner@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def create_saved_query(self, user, title):
+        return SavedQuery.objects.create(user=user, title=title, sql="SELECT 1;")
+
+    def test_exact_duplicate_title_for_same_user_is_rejected(self):
+        self.create_saved_query(self.user, "Top Students")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_saved_query(self.user, "Top Students")
+
+    def test_case_variant_duplicate_title_for_same_user_is_rejected(self):
+        self.create_saved_query(self.user, "Top Students")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_saved_query(self.user, "top students")
+
+    def test_same_title_for_different_users_is_allowed(self):
+        self.create_saved_query(self.user, "Top Students")
+        self.create_saved_query(self.other_user, "Top Students")
+
+        self.assertEqual(SavedQuery.objects.filter(title="Top Students").count(), 2)
+
+    def test_saved_query_recent_index_is_declared(self):
+        index = next(
+            index
+            for index in SavedQuery._meta.indexes
+            if index.name == "savedquery_user_recent_idx"
+        )
+
+        self.assertEqual(index.fields, ["user", "-updated_at", "-created_at"])
+
+
+class QueryHistoryConstraintTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="history-owner",
+            email="history-owner@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def test_invalid_status_is_rejected_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                QueryHistory.objects.create(
+                    user=self.user,
+                    sql="SELECT 1;",
+                    status="pending",
+                )
+
+    def test_negative_row_count_is_rejected_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                QueryHistory.objects.create(
+                    user=self.user,
+                    sql="SELECT 1;",
+                    row_count=-1,
+                )
+
+    def test_zero_and_positive_row_counts_are_allowed(self):
+        zero = QueryHistory.objects.create(user=self.user, sql="SELECT 1;")
+        positive = QueryHistory.objects.create(
+            user=self.user,
+            sql="SELECT 1;",
+            row_count=12,
+        )
+
+        self.assertEqual(zero.row_count, 0)
+        self.assertEqual(positive.row_count, 12)
+
+    def test_row_count_uses_positive_integer_field(self):
+        field = QueryHistory._meta.get_field("row_count")
+
+        self.assertIsInstance(field, PositiveIntegerField)
+
+    def test_query_history_recent_index_is_declared(self):
+        index = next(
+            index
+            for index in QueryHistory._meta.indexes
+            if index.name == "queryhistory_user_recent_idx"
+        )
+
+        self.assertEqual(index.fields, ["user", "-executed_at"])
