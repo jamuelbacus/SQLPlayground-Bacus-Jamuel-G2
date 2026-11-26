@@ -1,6 +1,10 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+
+from .models import SavedQuery
 
 User = get_user_model()
 
@@ -293,3 +297,111 @@ class UserManagementTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
+
+
+class SavedQueryTransactionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="transaction-owner",
+            email="transaction-owner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_create_failure_after_write_rolls_back(self):
+        with patch(
+            "dashboard.views.messages.success", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("saved_query_create"),
+                    {"title": "Rollback", "sql": "SELECT 1;"},
+                )
+
+        self.assertFalse(
+            SavedQuery.objects.filter(user=self.learner, title="Rollback").exists()
+        )
+
+    def test_edit_failure_after_write_rolls_back(self):
+        saved_query = SavedQuery.objects.create(
+            user=self.learner,
+            title="Original",
+            sql="SELECT original;",
+        )
+
+        with patch(
+            "dashboard.views.messages.success", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("saved_query_edit", args=[saved_query.pk]),
+                    {"title": "Changed", "sql": "SELECT changed;"},
+                )
+
+        saved_query.refresh_from_db()
+        self.assertEqual(saved_query.title, "Original")
+        self.assertEqual(saved_query.sql, "SELECT original;")
+
+
+class UserManagementTransactionTests(TestCase):
+    def setUp(self):
+        self.administrator = User.objects.create_user(
+            username="tx-admin",
+            email="tx-admin@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.learner = User.objects.create_user(
+            username="tx-learner",
+            email="tx-learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.administrator)
+
+    def test_edit_failure_after_save_rolls_back(self):
+        with patch(
+            "dashboard.views.messages.success", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("user_edit", args=[self.learner.pk]),
+                    {
+                        "username": "tx-learner",
+                        "first_name": "Changed",
+                        "last_name": "User",
+                        "email": "tx-learner@example.com",
+                        "role": User.Role.ADMINISTRATOR,
+                        "is_active": "on",
+                    },
+                )
+
+        self.learner.refresh_from_db()
+        self.assertEqual(self.learner.role, User.Role.LEARNER)
+        self.assertEqual(self.learner.first_name, "")
+
+    def test_password_failure_after_save_rolls_back(self):
+        with patch(
+            "dashboard.views.messages.success", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("user_password", args=[self.learner.pk]),
+                    {
+                        "password1": "N3wStr0ngPass!",
+                        "password2": "N3wStr0ngPass!",
+                    },
+                )
+
+        self.learner.refresh_from_db()
+        self.assertTrue(self.learner.check_password("Str0ngPass!234"))
+
+    def test_delete_failure_after_delete_rolls_back(self):
+        with patch(
+            "dashboard.views.messages.success", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("user_delete", args=[self.learner.pk])
+                )
+
+        self.assertTrue(User.objects.filter(pk=self.learner.pk).exists())
