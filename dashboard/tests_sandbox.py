@@ -203,6 +203,7 @@ class SandboxWriteRejectionTests(TestCase):
                 result = response.context["last_result"]
                 self.assertFalse(result["success"])
                 self.assertEqual(result["error"], STABLE_REJECTION)
+                self.assertContains(response, STABLE_REJECTION)
 
                 history = QueryHistory.objects.get(user=self.learner)
                 self.assertEqual(history.status, "error")
@@ -222,6 +223,7 @@ class SandboxWriteRejectionTests(TestCase):
                 result = response.context["last_result"]
                 self.assertFalse(result["success"])
                 self.assertEqual(result["error"], AUTHORIZER_REJECTION)
+                self.assertContains(response, AUTHORIZER_REJECTION)
 
                 history = QueryHistory.objects.get(user=self.learner)
                 self.assertEqual(history.status, "error")
