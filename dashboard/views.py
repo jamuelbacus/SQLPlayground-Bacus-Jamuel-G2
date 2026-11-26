@@ -281,16 +281,44 @@ def user_create(request):
     )
 
 
-def _is_last_active_administrator(account):
+def _locked_active_administrators():
+    """Return active administrators locked in a stable order.
+
+    PostgreSQL serializes concurrent guard checks when these rows are read
+    with ``FOR UPDATE``; the primary-key ordering avoids lock-order deadlocks.
+    """
+    return (
+        CustomUser.objects.filter(
+            role=CustomUser.Role.ADMINISTRATOR,
+            is_active=True,
+        )
+        .order_by("pk")
+        .select_for_update()
+    )
+
+
+def _is_last_active_administrator(account, active_administrators=None):
     if not account.is_administrator or not account.is_active:
         return False
-    return not (
-        CustomUser.objects.filter(
-            role=CustomUser.Role.ADMINISTRATOR, is_active=True
-        )
-        .exclude(pk=account.pk)
-        .exists()
+    if active_administrators is None:
+        active_administrators = _locked_active_administrators()
+    return (
+        any(admin.pk == account.pk for admin in active_administrators)
+        and not any(admin.pk != account.pk for admin in active_administrators)
     )
+
+
+def _locked_target(target, active_administrators):
+    """Re-read the target under lock so the guard uses committed state."""
+    locked_target = next(
+        (admin for admin in active_administrators if admin.pk == target.pk),
+        None,
+    )
+    if locked_target is None:
+        locked_target = get_object_or_404(
+            CustomUser.objects.select_for_update(), pk=target.pk
+        )
+    return locked_target
 
 
 @role_required(CustomUser.Role.ADMINISTRATOR)
@@ -310,10 +338,14 @@ def user_edit(request, pk):
             new_role = form.cleaned_data["role"]
             new_active = form.cleaned_data["is_active"]
             with transaction.atomic():
+                active_administrators = list(_locked_active_administrators())
+                locked_target = _locked_target(target, active_administrators)
                 removes_last_admin = (
-                    target.is_administrator
+                    locked_target.is_administrator
                     and (new_role != CustomUser.Role.ADMINISTRATOR or not new_active)
-                    and _is_last_active_administrator(target)
+                    and _is_last_active_administrator(
+                        locked_target, active_administrators
+                    )
                 )
                 if removes_last_admin:
                     form.add_error(
@@ -379,7 +411,9 @@ def user_delete(request, pk):
 
     if request.method == "POST":
         with transaction.atomic():
-            if _is_last_active_administrator(target):
+            active_administrators = list(_locked_active_administrators())
+            target = _locked_target(target, active_administrators)
+            if _is_last_active_administrator(target, active_administrators):
                 messages.error(
                     request, "At least one active administrator must remain."
                 )

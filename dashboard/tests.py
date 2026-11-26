@@ -1,10 +1,12 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db.models.query import QuerySet
 from django.test import TestCase
 from django.urls import reverse
 
 from .models import SavedQuery
+from .views import _is_last_active_administrator
 
 User = get_user_model()
 
@@ -297,6 +299,143 @@ class UserManagementTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
+
+
+class LastAdministratorGuardTests(TestCase):
+    def setUp(self):
+        self.first_admin = User.objects.create_user(
+            username="guard-admin-1",
+            email="guard-admin-1@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.second_admin = User.objects.create_user(
+            username="guard-admin-2",
+            email="guard-admin-2@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.client.force_login(self.first_admin)
+
+    @staticmethod
+    def _call_with_lock_spy(action):
+        original_select_for_update = QuerySet.select_for_update
+        locked_querysets = []
+
+        def record(queryset):
+            locked_queryset = original_select_for_update(queryset)
+            locked_querysets.append(locked_queryset)
+            return locked_queryset
+
+        with patch.object(
+            QuerySet,
+            "select_for_update",
+            autospec=True,
+            side_effect=record,
+        ):
+            response = action()
+        return response, locked_querysets
+
+    def _assert_active_administrators_locked(self, locked_querysets):
+        is_active_column = User._meta.get_field("is_active").column
+        role_column = User._meta.get_field("role").column
+        order_by = (
+            f'ORDER BY "{User._meta.db_table}"."{User._meta.pk.column}" ASC'
+        )
+        locked_admin_querysets = []
+        for queryset in locked_querysets:
+            query = str(queryset.query)
+            if (
+                queryset.model is User
+                and queryset.query.select_for_update
+                and f'"{is_active_column}" = True' in query
+                and f'"{role_column}" = ADMINISTRATOR' in query
+                and order_by in query
+            ):
+                locked_admin_querysets.append(queryset)
+
+        self.assertTrue(
+            locked_admin_querysets,
+            "Expected select_for_update() on the active-administrator queryset.",
+        )
+
+    def test_user_edit_locks_active_administrators_before_guard(self):
+        def edit_admin():
+            return self.client.post(
+                reverse("user_edit", args=[self.second_admin.pk]),
+                {
+                    "username": self.second_admin.username,
+                    "first_name": "Second",
+                    "last_name": "Admin",
+                    "email": self.second_admin.email,
+                    "role": User.Role.LEARNER,
+                    "is_active": "on",
+                },
+            )
+
+        response, locked_querysets = self._call_with_lock_spy(edit_admin)
+
+        self.assertRedirects(response, reverse("manage_users"))
+        self._assert_active_administrators_locked(locked_querysets)
+        self.second_admin.refresh_from_db()
+        self.assertEqual(self.second_admin.role, User.Role.LEARNER)
+
+    def test_user_delete_locks_active_administrators_before_guard(self):
+        def delete_admin():
+            return self.client.post(
+                reverse("user_delete", args=[self.second_admin.pk])
+            )
+
+        response, locked_querysets = self._call_with_lock_spy(delete_admin)
+
+        self.assertRedirects(response, reverse("manage_users"))
+        self._assert_active_administrators_locked(locked_querysets)
+        self.assertFalse(User.objects.filter(pk=self.second_admin.pk).exists())
+
+    def test_edit_reports_error_when_locked_set_has_only_target(self):
+        with patch(
+            "dashboard.views._locked_active_administrators",
+            return_value=[self.second_admin],
+        ):
+            response = self.client.post(
+                reverse("user_edit", args=[self.second_admin.pk]),
+                {
+                    "username": self.second_admin.username,
+                    "first_name": "Second",
+                    "last_name": "Admin",
+                    "email": self.second_admin.email,
+                    "role": User.Role.LEARNER,
+                    "is_active": "on",
+                },
+            )
+
+        self.assertContains(response, "At least one active administrator must remain.")
+        self.second_admin.refresh_from_db()
+        self.assertEqual(self.second_admin.role, User.Role.ADMINISTRATOR)
+
+    def test_delete_reports_error_when_locked_set_has_only_target(self):
+        with patch(
+            "dashboard.views._locked_active_administrators",
+            return_value=[self.second_admin],
+        ):
+            response = self.client.post(
+                reverse("user_delete", args=[self.second_admin.pk])
+            )
+
+        self.assertRedirects(
+            response, reverse("user_delete", args=[self.second_admin.pk])
+        )
+        self.assertTrue(User.objects.filter(pk=self.second_admin.pk).exists())
+
+    def test_guard_recognizes_last_active_administrator_from_locked_set(self):
+        User.objects.filter(pk=self.second_admin.pk).update(is_active=False)
+
+        self.assertTrue(
+            _is_last_active_administrator(self.first_admin, [self.first_admin])
+        )
+        self.assertFalse(
+            _is_last_active_administrator(self.second_admin, [self.first_admin])
+        )
 
 
 class SavedQueryTransactionTests(TestCase):
