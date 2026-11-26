@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from accounts.decorators import role_required
 from accounts.models import CustomUser
+from dashboard.forms import SqlSubmissionForm
 
 from .curriculum import (
     LESSONS,
@@ -101,6 +102,7 @@ def lesson_check(request, slug):
 
     sql = (request.POST.get("sql") or "").strip()
     request.session[f"lesson_sql_{slug}"] = sql
+    form = SqlSubmissionForm({"sql": sql})
 
     progress, _ = LessonProgress.objects.get_or_create(
         user=request.user, lesson_slug=slug
@@ -118,8 +120,14 @@ def lesson_check(request, slug):
         "error": "",
     }
 
+    if not form.is_valid():
+        result["error"] = form.errors["sql"][0]
+        result["message"] = "Your query could not run."
+        request.session[f"lesson_result_{slug}"] = result
+        return redirect("lesson_detail", slug=slug)
+
     try:
-        actual = run_query(sql)
+        actual = run_query(form.cleaned_data["sql"])
         expected = run_query(lesson.reference_sql)
         passed = results_match(actual, expected, lesson.ordered)
         result.update(

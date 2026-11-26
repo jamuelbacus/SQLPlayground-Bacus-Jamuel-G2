@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from lessons.engine import MAX_SQL_LENGTH, TOO_LONG_SQL_MESSAGE
+
 from .models import QueryHistory, SavedQuery
 
 User = get_user_model()
@@ -176,3 +178,47 @@ class SavedQueryTests(TestCase):
 
         self.assertRedirects(response, reverse("saved_query_list"))
         self.assertFalse(SavedQuery.objects.exists())
+
+
+class SqlSubmissionValidationTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_sandbox_escapes_html_in_sql_and_error_text(self):
+        sql = 'SELECT * FROM "<script>alert(1)</script>"'
+
+        response = self.client.post(
+            reverse("sandbox_execute"), {"sql": sql}, follow=True
+        )
+
+        result = response.context["last_result"]
+        self.assertIn("<script>", result["error"])
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+
+    def test_sandbox_reports_overlength_sql_with_stable_message(self):
+        sql = "SELECT " + "x" * (MAX_SQL_LENGTH - len("SELECT ") + 1)
+
+        response = self.client.post(
+            reverse("sandbox_execute"), {"sql": sql}, follow=True
+        )
+
+        result = response.context["last_result"]
+        self.assertEqual(result["error"], TOO_LONG_SQL_MESSAGE)
+        self.assertContains(response, TOO_LONG_SQL_MESSAGE)
+        history = QueryHistory.objects.get(user=self.learner)
+        self.assertEqual(history.error_message, TOO_LONG_SQL_MESSAGE)
+
+    def test_saved_query_create_rejects_invalid_sql(self):
+        response = self.client.post(
+            reverse("saved_query_create"),
+            {"title": "Bad SQL", "sql": "DELETE FROM students"},
+        )
+
+        self.assertRedirects(response, reverse("saved_query_list"))
+        self.assertFalse(SavedQuery.objects.filter(title="Bad SQL").exists())

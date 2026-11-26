@@ -401,3 +401,18 @@ class LessonViewTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
+
+    def test_lesson_check_escapes_html_in_sql_and_error_text(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": 'SELECT * FROM "<script>alert(1)</script>"'},
+            follow=True,
+        )
+
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNone(progress.completed_at)
