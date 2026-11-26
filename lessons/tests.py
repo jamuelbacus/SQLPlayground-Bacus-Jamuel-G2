@@ -1,3 +1,4 @@
+import sqlite3
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -9,6 +10,7 @@ from django.utils import timezone
 
 from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
+    _authorizer,
     MAX_ROWS,
     QueryError,
     QueryResult,
@@ -116,6 +118,39 @@ class RunQueryTests(SimpleTestCase):
     def test_database_error_is_reported(self):
         with self.assertRaisesMessage(QueryError, "SQL error"):
             run_query("SELECT missing_column FROM students")
+
+    def test_disallowed_function_is_denied(self):
+        with self.assertRaisesMessage(QueryError, "not authorized"):
+            run_query("SELECT sqlite_version()")
+
+    def test_lesson_aggregate_functions_remain_available(self):
+        result = run_query(
+            "SELECT COUNT(*), SUM(credits) FROM courses"
+        )
+
+        self.assertEqual(result.rows, [(5, 15)])
+
+    def test_like_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name LIKE 'A%'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_glob_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name GLOB 'A*'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_attach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("ATTACH DATABASE ':memory:' AS other")
+
+    def test_detach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("DETACH DATABASE other")
 
 
 class ResultsMatchTests(SimpleTestCase):
@@ -401,3 +436,17 @@ class LessonViewTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
+
+
+class AuthorizerTests(SimpleTestCase):
+    def test_attach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_ATTACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
+
+    def test_detach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_DETACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
