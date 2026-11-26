@@ -52,7 +52,11 @@ class TestSettingsDatabaseTests(SimpleTestCase):
         database = isolated_settings.DATABASES["default"]
 
         self.assertEqual(database["ENGINE"], "django.db.backends.sqlite3")
-        self.assertEqual(database["NAME"], ":memory:")
+        self.assertTrue(
+            database["NAME"] == ":memory:"
+            or str(database["NAME"]).startswith("file:memorydb_"),
+            f"expected an in-memory SQLite name, got {database['NAME']!r}",
+        )
 
     def test_production_settings_keep_postgresql(self):
         database = production_settings.DATABASES["default"]
