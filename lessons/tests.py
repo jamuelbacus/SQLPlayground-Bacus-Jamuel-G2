@@ -427,7 +427,8 @@ class LessonCheckCsrfTests(TestCase):
 
     def test_check_rejects_invalid_token(self):
         token = csrf_token_from_response(
-            self.client.get(reverse("lesson_detail", args=[self.slug]))
+            self.client.get(reverse("lesson_detail", args=[self.slug])),
+            reverse("lesson_check", args=[self.slug]),
         )
         response = self.client.post(
             reverse("lesson_check", args=[self.slug]),

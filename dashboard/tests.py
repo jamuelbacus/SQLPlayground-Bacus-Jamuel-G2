@@ -324,9 +324,8 @@ class SavedQueryCsrfTests(TestCase):
         self.assertEqual(SavedQuery.objects.filter(user=self.learner).count(), 1)
 
     def test_create_rejects_invalid_token(self):
-        token = csrf_token_from_response(
-            self.client.get(reverse("saved_query_create"))
-        )
+        url = reverse("saved_query_create")
+        token = csrf_token_from_response(self.client.get(url), url)
         response = self.client.post(
             reverse("saved_query_create"),
             {
@@ -448,12 +447,12 @@ class UserManagementCsrfTests(TestCase):
         self.assertFalse(User.objects.filter(username="newuser").exists())
 
     def test_user_create_accepts_valid_token(self):
-        token_page = reverse("manage_users")
+        token_page = reverse("user_create")
         response = post_with_csrf_token(
             self.client, token_page, reverse("user_create"), self.create_data
         )
 
-        self.assertRedirects(response, token_page)
+        self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(username="newuser").exists())
 
     def test_user_edit_rejects_post_without_token(self):
@@ -467,11 +466,10 @@ class UserManagementCsrfTests(TestCase):
         self.assertTrue(self.learner.is_active)
 
     def test_user_edit_accepts_valid_token(self):
-        token_page = reverse("manage_users")
         url = reverse("user_edit", args=[self.learner.pk])
-        response = post_with_csrf_token(self.client, token_page, url, self.edit_data)
+        response = post_with_csrf_token(self.client, url, url, self.edit_data)
 
-        self.assertRedirects(response, token_page)
+        self.assertRedirects(response, reverse("manage_users"))
         self.learner.refresh_from_db()
         self.assertEqual(self.learner.role, User.Role.ADMINISTRATOR)
 
@@ -486,11 +484,8 @@ class UserManagementCsrfTests(TestCase):
         self.assertFalse(self.learner.check_password("N3wStr0ngPass!"))
 
     def test_password_change_accepts_valid_token(self):
-        token_page = reverse("manage_users")
         url = reverse("user_password", args=[self.learner.pk])
-        response = post_with_csrf_token(
-            self.client, token_page, url, self.password_data
-        )
+        response = post_with_csrf_token(self.client, url, url, self.password_data)
 
         self.assertRedirects(response, reverse("user_edit", args=[self.learner.pk]))
         self.learner.refresh_from_db()
@@ -505,13 +500,8 @@ class UserManagementCsrfTests(TestCase):
         self.assertTrue(User.objects.filter(pk=self.learner.pk).exists())
 
     def test_user_delete_accepts_valid_token(self):
-        token_page = reverse("manage_users")
-        response = post_with_csrf_token(
-            self.client,
-            token_page,
-            reverse("user_delete", args=[self.learner.pk]),
-            {},
-        )
+        url = reverse("user_delete", args=[self.learner.pk])
+        response = post_with_csrf_token(self.client, url, url, {})
 
-        self.assertRedirects(response, token_page)
+        self.assertRedirects(response, reverse("manage_users"))
         self.assertFalse(User.objects.filter(pk=self.learner.pk).exists())

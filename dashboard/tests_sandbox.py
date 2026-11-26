@@ -200,7 +200,9 @@ class SandboxCsrfTests(TestCase):
         self.assertFalse(QueryHistory.objects.exists())
 
     def test_execute_rejects_invalid_token(self):
-        token = csrf_token_from_response(self.client.get(reverse("sandbox")))
+        token = csrf_token_from_response(
+            self.client.get(reverse("sandbox")), reverse("sandbox_execute")
+        )
         response = self.client.post(
             reverse("sandbox_execute"),
             {"sql": self.sql, "csrfmiddlewaretoken": f"invalid-{token}"},

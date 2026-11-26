@@ -452,6 +452,8 @@ class AccountCsrfTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "csrf-learner@example.com")
+        self.assertEqual(self.user.first_name, "Learner")
+        self.assertEqual(self.user.last_name, "One")
 
     def test_profile_edit_rejects_invalid_token(self):
         self.client.force_login(self.user)
@@ -464,6 +466,8 @@ class AccountCsrfTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "csrf-learner@example.com")
+        self.assertEqual(self.user.first_name, "Learner")
+        self.assertEqual(self.user.last_name, "One")
 
     def test_profile_edit_accepts_valid_token(self):
         self.client.force_login(self.user)
