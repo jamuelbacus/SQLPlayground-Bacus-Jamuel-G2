@@ -141,6 +141,17 @@ class SavedQueryTests(TestCase):
             title="All students",
             sql="SELECT * FROM students;",
         )
+        self.other_saved_query = SavedQuery.objects.create(
+            user=self.other_learner,
+            title="Other query",
+            sql="SELECT * FROM courses;",
+        )
+
+    def assert_other_query_unchanged(self):
+        self.other_saved_query.refresh_from_db()
+        self.assertEqual(self.other_saved_query.title, "Other query")
+        self.assertEqual(self.other_saved_query.sql, "SELECT * FROM courses;")
+        self.assertEqual(SavedQuery.objects.count(), 2)
 
     def test_saved_query_list_is_available_from_the_sandbox(self):
         response = self.client.get(reverse("saved_query_list"))
@@ -175,4 +186,68 @@ class SavedQueryTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("saved_query_list"))
-        self.assertFalse(SavedQuery.objects.exists())
+        self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
+
+    def test_learner_cannot_open_another_learners_saved_query_edit_page(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.get(
+            reverse("saved_query_edit", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_edit_another_learners_saved_query(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.post(
+            reverse("saved_query_edit", args=[self.other_saved_query.pk]),
+            {"title": "Hijacked", "sql": "DELETE FROM students;"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_open_another_learners_saved_query_delete_confirmation(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.get(
+            reverse("saved_query_delete", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_delete_another_learners_saved_query(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.post(
+            reverse("saved_query_delete", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_owner_can_edit_their_saved_query(self):
+        url = reverse("saved_query_edit", args=[self.saved_query.pk])
+
+        response = self.client.post(
+            url,
+            {"title": "Edited students", "sql": "SELECT last_name FROM students;"},
+        )
+
+        self.assertRedirects(
+            response, reverse("saved_query_detail", args=[self.saved_query.pk])
+        )
+        self.saved_query.refresh_from_db()
+        self.assertEqual(self.saved_query.title, "Edited students")
+        self.assertEqual(self.saved_query.sql, "SELECT last_name FROM students;")
+
+    def test_owner_can_delete_their_saved_query(self):
+        response = self.client.post(
+            reverse("saved_query_delete", args=[self.saved_query.pk])
+        )
+
+        self.assertRedirects(response, reverse("saved_query_list"))
+        self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
