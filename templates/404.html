@@ -1,0 +1,14 @@
+{% extends "base_public.html" %}
+
+{% block title %}Page not found | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="card empty-state">
+    <p class="eyebrow">404 &middot; Not Found</p>
+    <h1>We could not find that page.</h1>
+    <p class="muted">
+      The page you requested is not available. Check the address or return home.
+    </p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Back to home</a>
+  </section>
+{% endblock %}
