@@ -8,6 +8,8 @@ hosts) are read from a local .env file. See .env.example for the keys.
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / "subdir".
@@ -20,6 +22,30 @@ load_dotenv(BASE_DIR / ".env")
 def env_list(name, default=""):
     """Return a comma-separated environment variable as a clean list."""
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+REQUIRED_ENV_VARS = ("SECRET_KEY", "DB_USER", "DB_PASSWORD", "DB_HOST")
+
+
+def validate_required_config():
+    """Raise an actionable error when required production values are missing."""
+    missing = [name for name in REQUIRED_ENV_VARS if not os.getenv(name)]
+    if missing:
+        raise ImproperlyConfigured(
+            "Missing required environment variable(s): "
+            + ", ".join(missing)
+            + ". Copy .env.example to .env and fill in the values, or run "
+            "tests with --settings=sqlplayground.settings_test."
+        )
+
+
+def uses_test_settings():
+    """Return True when the active settings module is the test configuration."""
+    return os.getenv("DJANGO_SETTINGS_MODULE", "").endswith("settings_test")
+
+
+if not uses_test_settings():
+    validate_required_config()
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
