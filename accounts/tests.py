@@ -4,8 +4,10 @@ import tempfile
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 User = get_user_model()
 
@@ -347,6 +349,139 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+
+class AccountCsrfTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.user = User.objects.create_user(
+            username="csrf-learner",
+            email="csrf-learner@example.com",
+            password="Str0ngPass!234",
+            first_name="Learner",
+            last_name="One",
+        )
+        self.signup_data = {
+            "first_name": "Jamuel",
+            "last_name": "Bacus",
+            "username": "jamuel",
+            "email": "jamuel@example.com",
+            "password1": "Str0ngPass!234",
+            "password2": "Str0ngPass!234",
+        }
+        self.login_data = {
+            "username": "csrf-learner",
+            "password": "Str0ngPass!234",
+        }
+        self.profile_data = {
+            "first_name": "Jamuel",
+            "last_name": "Bacus",
+            "email": "changed@example.com",
+        }
+
+    def test_signup_rejects_post_without_token(self):
+        response = self.client.post(reverse("signup"), self.signup_data)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username="jamuel").exists())
+
+    def test_signup_rejects_invalid_token(self):
+        response = self.client.post(
+            reverse("signup"),
+            {**self.signup_data, "csrfmiddlewaretoken": "not-a-valid-token"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username="jamuel").exists())
+
+    def test_signup_accepts_valid_token(self):
+        url = reverse("signup")
+        response = post_with_csrf_token(self.client, url, url, self.signup_data)
+
+        self.assertRedirects(response, reverse("login"))
+        user = User.objects.get(username="jamuel")
+        self.assertEqual(user.role, User.Role.LEARNER)
+
+    def test_login_rejects_post_without_token(self):
+        response = self.client.post(reverse("login"), self.login_data)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.user.refresh_from_db()
+        self.assertIsNone(self.user.last_login)
+
+    def test_login_accepts_valid_token(self):
+        response = post_with_csrf_token(
+            self.client,
+            reverse("login"),
+            reverse("login"),
+            self.login_data,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("dashboard"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(int(self.client.session["_auth_user_id"]), self.user.pk)
+
+    def test_logout_rejects_post_without_token(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_logout_accepts_valid_token(self):
+        self.client.force_login(self.user)
+        response = post_with_csrf_token(
+            self.client,
+            reverse("profile"),
+            reverse("logout"),
+            {},
+        )
+
+        self.assertRedirects(response, reverse("login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_profile_edit_rejects_post_without_token(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("profile_edit"), self.profile_data)
+
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "csrf-learner@example.com")
+        self.assertEqual(self.user.first_name, "Learner")
+        self.assertEqual(self.user.last_name, "One")
+
+    def test_profile_edit_rejects_invalid_token(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("profile_edit"),
+            {**self.profile_data, "csrfmiddlewaretoken": "not-a-valid-token"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "csrf-learner@example.com")
+        self.assertEqual(self.user.first_name, "Learner")
+        self.assertEqual(self.user.last_name, "One")
+
+    def test_profile_edit_accepts_valid_token(self):
+        self.client.force_login(self.user)
+        response = post_with_csrf_token(
+            self.client,
+            reverse("profile_edit"),
+            reverse("profile_edit"),
+            self.profile_data,
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, "changed@example.com")
 
 
 class UserRoleConstraintTests(TestCase):
