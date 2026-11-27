@@ -476,3 +476,34 @@ class ProfileTests(TestCase):
                 form.save()
 
         self.assertTrue(storage.exists(old_name))
+
+    def test_profile_edit_without_new_photo_keeps_the_existing_file(self):
+        photo = SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        photo_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(photo_name))
+
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Updated",
+                "email": "jamuel@example.com",
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.profile_photo.name, photo_name)
+        self.assertTrue(storage.exists(photo_name))
