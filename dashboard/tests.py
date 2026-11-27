@@ -2,8 +2,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from dashboard.forms import AdminUserCreateForm, AdminUserEditForm
+from dashboard.models import QueryHistory, SavedQuery
 User = get_user_model()
+from dashboard.forms import AdminUserCreateForm, AdminUserEditForm
 from datetime import timedelta
 from unittest.mock import patch
 from django.contrib.messages import get_messages
@@ -398,6 +399,88 @@ class UserManagementTests(TestCase):
         self.learner.refresh_from_db()
         self.assertEqual(self.learner.username, "LEARNER1")
         self.assertEqual(self.learner.email, "learner1@example.com")
+
+class QueryCountRegressionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="learner",
+            email="learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.administrator = User.objects.create_user(
+            username="admin",
+            email="admin@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        for index in range(5):
+            SavedQuery.objects.create(
+                user=self.learner, title=f"Query {index}", sql="SELECT 1;"
+            )
+            QueryHistory.objects.create(
+                user=self.learner, sql="SELECT 1;", status="success"
+            )
+            User.objects.create_user(
+                username=f"user{index}",
+                email=f"user{index}@example.com",
+                password="Str0ngPass!234",
+            )
+
+    def test_learner_dashboard_query_count(self):
+        self.client.force_login(self.learner)
+
+        with self.assertNumQueries(5):
+            response = self.client.get(reverse("learner_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_administrator_dashboard_query_count(self):
+        self.client.force_login(self.administrator)
+
+        with self.assertNumQueries(4):
+            response = self.client.get(reverse("administrator_dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_learners"], 6)
+        self.assertEqual(response.context["total_administrators"], 1)
+
+    def test_saved_query_list_query_count(self):
+        self.client.force_login(self.learner)
+
+        with self.assertNumQueries(3):
+            response = self.client.get(reverse("saved_query_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["saved_queries"]), 5)
+
+    def test_sandbox_query_history_query_count(self):
+        self.client.force_login(self.learner)
+
+        with self.assertNumQueries(4):
+            response = self.client.get(reverse("sandbox"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["query_history"]), 5)
+
+    def test_sandbox_history_user_is_already_loaded(self):
+        self.client.force_login(self.learner)
+        response = self.client.get(reverse("sandbox"))
+        histories = list(response.context["query_history"])
+
+        with self.assertNumQueries(0):
+            rendered = [str(item) for item in histories]
+
+        self.assertTrue(all(text.startswith("learner: ") for text in rendered))
+
+    def test_manage_users_query_count(self):
+        self.client.force_login(self.administrator)
+
+        with self.assertNumQueries(4):
+            response = self.client.get(reverse("manage_users"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_count"], 7)
+        self.assertEqual(len(response.context["page_obj"].object_list), 7)
 
 class AdminContactNumberFormTests(TestCase):
     CONTACT_ERROR = "Enter a valid contact number (7-15 digits, optional leading +)."

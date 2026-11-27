@@ -11,8 +11,8 @@ INACTIVE_ACCOUNT_MESSAGE = "This account is inactive. Please contact an administ
 
 def _session_user_is_inactive(request):
     user = request.user
-    if user.is_authenticated and not user.is_active:
-        return True
+    if user.is_authenticated:
+        return not user.is_active
 
     user_id = request.session.get("_auth_user_id")
     if not user_id:
