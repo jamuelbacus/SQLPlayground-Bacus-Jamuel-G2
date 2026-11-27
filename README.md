@@ -139,7 +139,13 @@ pip install -r requirements.txt
 
 ### 4. Configure environment variables
 
-Create a `.env` file in the project root:
+Copy the committed template to a `.env` file in the project root and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+The template contains:
 
 ```dotenv
 SECRET_KEY=your-secret-key
@@ -171,6 +177,8 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 | `DB_PASSWORD` | Database password |
 | `DB_HOST` | Database host |
 | `DB_PORT` | Database port (default: 5432) |
+
+Startup with the default settings fails fast when `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, or `DB_HOST` is missing; the error names every missing variable. `.env` stays ignored by Git. The test settings module skips this validation, so the suite runs with `--settings=sqlplayground.settings_test` and no production credentials.
 
 ### 5. Apply database migrations
 
@@ -236,7 +244,7 @@ python manage.py test --settings=sqlplayground.settings_test
 
 `settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. Production settings are unchanged, so `python manage.py test` still uses the configured PostgreSQL database.
 
-The current test suite contains 114 tests covering:
+The current test suite contains 120 tests covering:
 
 - Registration and input validation
 - Password hashing
@@ -249,11 +257,13 @@ The current test suite contains 114 tests covering:
 - Guided lesson curriculum, grading, attempt counts, and completion
 - Sandbox isolation from application tables, row limits, timeouts, and history
 - Permanent redirect from the old learning route to the sandbox
+- Configuration template and fail-fast validation of required environment variables
 
 ## Project Structure
 
 ```text
 .
+├── .env.example     # Committed template of supported environment variables
 ├── accounts/        # Authentication, roles, profiles, and account tests
 ├── dashboard/       # Role dashboards, sandbox, saved queries, user management
 │   └── migrations/  # QueryHistory and SavedQuery schema
