@@ -66,7 +66,7 @@ class CustomErrorHandlingTests(TestCase):
     @patch("dashboard.views.run_query", side_effect=QueryError("Only SELECT is allowed."))
     def test_practice_sql_error_keeps_existing_handling(self, _run_query):
         response = self.client.post(
-            reverse("sandbox_execute"), {"sql": "DELETE FROM students;"}
+            reverse("sandbox_execute"), {"sql": "SELECT * FROM students;"}
         )
 
         self.assertRedirects(response, reverse("sandbox"))
