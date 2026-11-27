@@ -3,7 +3,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AdminPasswordChangeForm
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from accounts.decorators import role_required
@@ -75,8 +75,8 @@ def sandbox(request):
     )
     context = {
         "database_schema": schema_tables(),
-        "query_history": request.user.query_history.all()[:10],
-        "saved_queries": request.user.saved_queries.all()[:10],
+        "query_history": request.user.query_history.select_related("user").all()[:10],
+        "saved_queries": request.user.saved_queries.select_related("user").all()[:10],
         "default_sql": default_sql,
         "last_result": last_result,
     }
@@ -135,7 +135,9 @@ def saved_query_list(request):
     return render(
         request,
         "dashboard/saved_query_list.html",
-        {"saved_queries": request.user.saved_queries.all()},
+        {
+            "saved_queries": request.user.saved_queries.select_related("user").all()
+        },
     )
 
 
@@ -201,11 +203,16 @@ def saved_query_delete(request, pk):
 
 @role_required(CustomUser.Role.ADMINISTRATOR)
 def administrator_dashboard(request):
-    users = CustomUser.objects.order_by("-date_joined")
+    counts = CustomUser.objects.aggregate(
+        total_learners=Count("id", filter=Q(role=CustomUser.Role.LEARNER)),
+        total_administrators=Count(
+            "id", filter=Q(role=CustomUser.Role.ADMINISTRATOR)
+        ),
+    )
     context = {
-        "total_learners": users.filter(role=CustomUser.Role.LEARNER).count(),
-        "total_administrators": users.filter(role=CustomUser.Role.ADMINISTRATOR).count(),
-        "recent_users": users[:5],
+        "total_learners": counts["total_learners"],
+        "total_administrators": counts["total_administrators"],
+        "recent_users": CustomUser.objects.order_by("-date_joined")[:5],
     }
     return render(request, "dashboard/administrator_dashboard.html", context)
 
