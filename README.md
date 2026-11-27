@@ -148,19 +148,31 @@ cp .env.example .env
 The template contains:
 
 ```dotenv
-SECRET_KEY=your-secret-key
-DEBUG=True
+# Copy this file to .env and fill in real values. Never commit .env.
+
+# Django secret key. Generate one with:
+# python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+SECRET_KEY=replace-with-a-generated-secret-key
+
+# Set to True only for local development. Defaults to False.
+DEBUG=False
+
+# Comma-separated hostnames. Defaults to 127.0.0.1,localhost.
 ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Comma-separated trusted origins for CSRF. Safe to leave empty locally.
 CSRF_TRUSTED_ORIGINS=
 
+# PostgreSQL (Supabase) connection settings.
+# DB_NAME and DB_PORT have safe defaults when omitted.
 DB_NAME=postgres
-DB_USER=your-database-user
-DB_PASSWORD=your-database-password
-DB_HOST=your-database-host
+DB_USER=replace-with-database-user
+DB_PASSWORD=replace-with-database-password
+DB_HOST=replace-with-database-host
 DB_PORT=5432
 ```
 
-Generate a Django secret key:
+Replace every `replace-with-*` placeholder before the first run. Generate a Django secret key:
 
 ```bash
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
@@ -242,7 +254,7 @@ Run the test suite:
 python manage.py test --settings=sqlplayground.settings_test
 ```
 
-`settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. Production settings are unchanged, so `python manage.py test` still uses the configured PostgreSQL database.
+`settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. It also skips startup validation, so no production credentials are needed. Running `python manage.py test` with the default settings still requires the same environment variables as any other startup.
 
 The current test suite contains 120 tests covering:
 
