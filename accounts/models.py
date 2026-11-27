@@ -42,6 +42,14 @@ class CustomUser(AbstractUser):
             self.role = self.Role.ADMINISTRATOR
         super().save(*args, **kwargs)
 
+    def delete(self, *args, **kwargs):
+        """Remove the uploaded photo after the database row is deleted."""
+        photo_name = self.profile_photo.name
+        result = super().delete(*args, **kwargs)
+        if photo_name:
+            self.profile_photo.storage.delete(photo_name)
+        return result
+
     @property
     def is_learner(self):
         return self.role == self.Role.LEARNER
