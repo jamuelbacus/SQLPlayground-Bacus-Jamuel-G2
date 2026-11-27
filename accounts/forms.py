@@ -184,6 +184,11 @@ class ProfileForm(forms.ModelForm):
         for name, field in self.fields.items():
             if name != "profile_photo":
                 field.widget.attrs.setdefault("class", "form-input")
+        # is_valid() writes the submitted file onto self.instance, so keep the
+        # stored name from before binding for cleanup in save().
+        self._old_profile_photo_name = (
+            self.instance.profile_photo.name if self.instance.pk else None
+        )
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
@@ -191,6 +196,14 @@ class ProfileForm(forms.ModelForm):
         if duplicates.exists():
             raise ValidationError("An account with this email address already exists.")
         return email
+
+    def save(self, commit=True):
+        old_name = self._old_profile_photo_name
+        user = super().save(commit=commit)
+        new_name = user.profile_photo.name
+        if commit and old_name and old_name != new_name:
+            user.profile_photo.storage.delete(old_name)
+        return user
 
     def clean_profile_photo(self):
         return validate_profile_photo(self.cleaned_data["profile_photo"])

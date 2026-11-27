@@ -1,13 +1,12 @@
-from io import BytesIO
-
 import shutil
 import tempfile
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from PIL import Image
-from accounts.forms import ProfileForm
+from .forms import ProfileForm
 User = get_user_model()
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
 GIF_1X1 = (
@@ -15,6 +14,9 @@ GIF_1X1 = (
     b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
     b"\x00\x02\x02D\x01\x00;"
 )
+from io import BytesIO
+from PIL import Image
+from accounts.forms import ProfileForm
 from django.contrib.auth import HASH_SESSION_KEY, get_user_model
 from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
 from dashboard.models import QueryHistory, SavedQuery
@@ -351,6 +353,164 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+    def test_replacing_profile_photo_deletes_the_previous_file(self):
+        photo = SimpleUploadedFile("first.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        old_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(old_name))
+
+        replacement = SimpleUploadedFile(
+            "second.gif", GIF_1X1, content_type="image/gif"
+        )
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": replacement,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        new_name = self.user.profile_photo.name
+
+        self.assertNotEqual(new_name, old_name)
+        self.assertFalse(storage.exists(old_name))
+        self.assertTrue(storage.exists(new_name))
+
+    def test_clearing_profile_photo_deletes_the_stored_file(self):
+        photo = SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        old_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(old_name))
+
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo-clear": "on",
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+
+        self.assertFalse(self.user.profile_photo)
+        self.assertFalse(storage.exists(old_name))
+
+    def test_deleting_user_removes_the_profile_photo_file(self):
+        photo = SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        photo_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(photo_name))
+
+        self.user.delete()
+
+        self.assertFalse(storage.exists(photo_name))
+
+    def test_failed_save_keeps_the_existing_photo_file(self):
+        photo = SimpleUploadedFile("first.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        old_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(old_name))
+
+        replacement = SimpleUploadedFile(
+            "second.gif", GIF_1X1, content_type="image/gif"
+        )
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+            },
+            {"profile_photo": replacement},
+            instance=self.user,
+        )
+        self.assertTrue(form.is_valid())
+
+        with patch.object(User, "save", side_effect=RuntimeError("database unavailable")):
+            with self.assertRaises(RuntimeError):
+                form.save()
+
+        self.assertTrue(storage.exists(old_name))
+
+    def test_profile_edit_without_new_photo_keeps_the_existing_file(self):
+        photo = SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "profile_photo": photo,
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        photo_name = self.user.profile_photo.name
+        storage = self.user.profile_photo.storage
+        self.assertTrue(storage.exists(photo_name))
+
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Updated",
+                "email": "jamuel@example.com",
+            },
+        )
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+
+        self.assertEqual(self.user.profile_photo.name, photo_name)
+        self.assertTrue(storage.exists(photo_name))
 
 class ContactNumberValidationTests(TestCase):
     def setUp(self):
