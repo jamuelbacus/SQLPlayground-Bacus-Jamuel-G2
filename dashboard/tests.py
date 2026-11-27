@@ -1,23 +1,21 @@
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+
+from dashboard.forms import AdminUserCreateForm, AdminUserEditForm
+User = get_user_model()
 from datetime import timedelta
 from unittest.mock import patch
-
-from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.db.models import PositiveIntegerField
 from django.db.models.query import QuerySet
 from django.test import Client, TestCase, TransactionTestCase
-from django.urls import reverse
 from django.utils import timezone
-
 from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
-
 from .models import QueryHistory, SavedQuery
 from .views import _is_last_active_administrator
-
-User = get_user_model()
-
 
 class DashboardAccessTests(TestCase):
     def setUp(self):
@@ -103,7 +101,6 @@ class DashboardAccessTests(TestCase):
 
         self.assertEqual(superuser.role, User.Role.ADMINISTRATOR)
 
-
 class AdministratorDashboardContentTests(TestCase):
     def setUp(self):
         self.administrator = User.objects.create_user(
@@ -131,7 +128,6 @@ class AdministratorDashboardContentTests(TestCase):
         self.assertNotContains(response, "Administrator tools")
         self.assertNotContains(response, "Role reminder")
         self.assertNotContains(response, "Django admin")
-
 
 class UserManagementAccessTests(TestCase):
     def setUp(self):
@@ -169,7 +165,6 @@ class UserManagementAccessTests(TestCase):
         self.assertTemplateUsed(response, "dashboard/manage_users.html")
         self.assertContains(response, "Manage Users")
         self.assertContains(response, "Create User")
-
 
 class UserManagementTests(TestCase):
     def setUp(self):
@@ -308,6 +303,235 @@ class UserManagementTests(TestCase):
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
 
+    def test_create_user_rejects_case_variant_username(self):
+        response = self.client.post(
+            reverse("user_create"),
+            {
+                "username": "LEARNER1",
+                "first_name": "New",
+                "last_name": "User",
+                "email": "newuser@example.com",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+                "password1": "Str0ngPass!234",
+                "password2": "Str0ngPass!234",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("username", response.context["form"].errors)
+        self.assertFalse(User.objects.filter(email="newuser@example.com").exists())
+
+    def test_create_user_rejects_case_variant_email(self):
+        response = self.client.post(
+            reverse("user_create"),
+            {
+                "username": "newuser",
+                "first_name": "New",
+                "last_name": "User",
+                "email": "LEARNER1@example.com",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+                "password1": "Str0ngPass!234",
+                "password2": "Str0ngPass!234",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "An account with this email address already exists."
+        )
+        self.assertFalse(User.objects.filter(username="newuser").exists())
+
+    def test_edit_user_rejects_case_variant_username(self):
+        response = self.client.post(
+            reverse("user_edit", args=[self.learner.pk]),
+            {
+                "username": "ADMIN1",
+                "first_name": "Learner",
+                "last_name": "One",
+                "email": "learner1@example.com",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("username", response.context["form"].errors)
+        self.learner.refresh_from_db()
+        self.assertEqual(self.learner.username, "learner1")
+
+    def test_edit_user_rejects_case_variant_email(self):
+        response = self.client.post(
+            reverse("user_edit", args=[self.learner.pk]),
+            {
+                "username": "learner1",
+                "first_name": "Learner",
+                "last_name": "One",
+                "email": "ADMIN1@example.com",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "An account with this email address already exists."
+        )
+        self.learner.refresh_from_db()
+        self.assertEqual(self.learner.email, "learner1@example.com")
+
+    def test_edit_user_accepts_own_case_variant_identifiers(self):
+        response = self.client.post(
+            reverse("user_edit", args=[self.learner.pk]),
+            {
+                "username": "LEARNER1",
+                "first_name": "Learner",
+                "last_name": "One",
+                "email": "LEARNER1@example.com",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(response, reverse("manage_users"))
+        self.learner.refresh_from_db()
+        self.assertEqual(self.learner.username, "LEARNER1")
+        self.assertEqual(self.learner.email, "learner1@example.com")
+
+class AdminUserFormUniquenessTests(TestCase):
+    def setUp(self):
+        self.target = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.other = User.objects.create_user(
+            username="admin1",
+            email="admin1@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.create_data = {
+            "username": "newuser",
+            "first_name": "New",
+            "last_name": "User",
+            "email": "newuser@example.com",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+            "password1": "Str0ngPass!234",
+            "password2": "Str0ngPass!234",
+        }
+        self.edit_data = {
+            "username": "learner1",
+            "first_name": "Learner",
+            "last_name": "One",
+            "email": "learner1@example.com",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+        }
+
+    def test_create_form_rejects_case_variant_username(self):
+        form = AdminUserCreateForm({**self.create_data, "username": "ADMIN1"})
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["username"], ["This username is already taken."]
+        )
+
+    def test_create_form_rejects_case_variant_email(self):
+        form = AdminUserCreateForm(
+            {**self.create_data, "email": "ADMIN1@example.com"}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["email"],
+            ["An account with this email address already exists."],
+        )
+
+    def test_create_form_accepts_a_new_email(self):
+        form = AdminUserCreateForm(self.create_data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_edit_form_rejects_case_variant_username(self):
+        form = AdminUserEditForm(
+            {**self.edit_data, "username": "ADMIN1"}, instance=self.target
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["username"], ["This username is already taken."]
+        )
+
+    def test_edit_form_rejects_case_variant_email(self):
+        form = AdminUserEditForm(
+            {**self.edit_data, "email": "ADMIN1@example.com"},
+            instance=self.target,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["email"],
+            ["An account with this email address already exists."],
+        )
+
+    def test_edit_form_allows_the_accounts_own_case_variant_identifiers(self):
+        form = AdminUserEditForm(
+            {
+                **self.edit_data,
+                "username": "LEARNER1",
+                "email": "LEARNER1@example.com",
+            },
+            instance=self.target,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["email"], "learner1@example.com")
+
+class AdminUserFormNormalizationTests(TestCase):
+    def setUp(self):
+        self.target = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def test_create_form_strips_whitespace_and_preserves_username_case(self):
+        form = AdminUserCreateForm(
+            {
+                "username": "  NewUser  ",
+                "first_name": "New",
+                "last_name": "User",
+                "email": "  New.User@Example.com  ",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+                "password1": "Str0ngPass!234",
+                "password2": "Str0ngPass!234",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["username"], "NewUser")
+        self.assertEqual(form.cleaned_data["email"], "new.user@example.com")
+
+    def test_edit_form_strips_whitespace_and_preserves_username_case(self):
+        form = AdminUserEditForm(
+            {
+                "username": "  LEARNER1  ",
+                "first_name": "Learner",
+                "last_name": "One",
+                "email": "  LEARNER1@EXAMPLE.COM  ",
+                "role": User.Role.LEARNER,
+                "is_active": "on",
+            },
+            instance=self.target,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["username"], "LEARNER1")
+        self.assertEqual(form.cleaned_data["email"], "learner1@example.com")
 
 class SavedQueryCsrfTests(TestCase):
     def setUp(self):
@@ -409,7 +633,6 @@ class SavedQueryCsrfTests(TestCase):
 
         self.assertRedirects(response, reverse("saved_query_list"))
         self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
-
 
 class UserManagementCsrfTests(TestCase):
     def setUp(self):
@@ -515,7 +738,6 @@ class UserManagementCsrfTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertFalse(User.objects.filter(pk=self.learner.pk).exists())
-
 
 class LastAdministratorGuardTests(TestCase):
     def setUp(self):
@@ -653,7 +875,6 @@ class LastAdministratorGuardTests(TestCase):
             _is_last_active_administrator(self.second_admin, [self.first_admin])
         )
 
-
 class SavedQueryTransactionTests(TestCase):
     def setUp(self):
         self.learner = User.objects.create_user(
@@ -696,7 +917,6 @@ class SavedQueryTransactionTests(TestCase):
         saved_query.refresh_from_db()
         self.assertEqual(saved_query.title, "Original")
         self.assertEqual(saved_query.sql, "SELECT original;")
-
 
 class UserManagementTransactionTests(TestCase):
     def setUp(self):
@@ -761,7 +981,6 @@ class UserManagementTransactionTests(TestCase):
 
         self.assertTrue(User.objects.filter(pk=self.learner.pk).exists())
 
-
 class SavedQueryConstraintTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -811,7 +1030,6 @@ class SavedQueryConstraintTests(TestCase):
                 cursor, SavedQuery._meta.db_table
             )
         self.assertIn("savedquery_user_recent_idx", constraints)
-
 
 class QueryHistoryConstraintTests(TestCase):
     def setUp(self):
@@ -869,7 +1087,6 @@ class QueryHistoryConstraintTests(TestCase):
             )
         self.assertIn("queryhistory_user_recent_idx", constraints)
 
-
 class SavedQueryDuplicateHandlingTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -920,7 +1137,6 @@ class SavedQueryDuplicateHandlingTests(TestCase):
         self.assertEqual(other.sql, "SELECT 1;")
         self.existing.refresh_from_db()
         self.assertEqual(self.existing.title, "Top Students")
-
 
 class SavedQueryMigrationIntegrityTests(TransactionTestCase):
     migrate_from = [("dashboard", "0001_initial")]

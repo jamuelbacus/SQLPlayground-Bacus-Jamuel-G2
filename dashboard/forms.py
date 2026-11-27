@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.core.exceptions import ValidationError
 
 from accounts.models import CustomUser
 from lessons.engine import QueryError, validate_read_only_sql
@@ -34,6 +35,20 @@ class AdminUserCreateForm(UserCreationForm):
             if field.widget.input_type != "checkbox":
                 field.widget.attrs.setdefault("class", "form-input")
 
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        if CustomUser.objects.filter(username__iexact=username).exists():
+            raise ValidationError("This username is already taken.")
+        return username
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        if CustomUser.objects.filter(email__iexact=email).exists():
+            raise ValidationError(
+                "An account with this email address already exists."
+            )
+        return email
+
 
 class AdminUserEditForm(forms.ModelForm):
     """Update account details, role, and active status."""
@@ -60,6 +75,26 @@ class AdminUserEditForm(forms.ModelForm):
         for field in self.fields.values():
             if field.widget.input_type != "checkbox":
                 field.widget.attrs.setdefault("class", "form-input")
+
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        duplicates = CustomUser.objects.filter(username__iexact=username)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise ValidationError("This username is already taken.")
+        return username
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        duplicates = CustomUser.objects.filter(email__iexact=email)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise ValidationError(
+                "An account with this email address already exists."
+            )
+        return email
 
 
 class SqlSubmissionForm(forms.Form):
