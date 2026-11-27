@@ -13,7 +13,7 @@ from lessons.curriculum import LESSONS
 from lessons.engine import QueryError, run_query, schema_tables
 from lessons.models import LessonProgress
 
-from .forms import AdminUserCreateForm, AdminUserEditForm
+from .forms import AdminUserCreateForm, AdminUserEditForm, SqlSubmissionForm
 from .models import QueryHistory, SavedQuery
 
 DEFAULT_SQL = "SELECT * FROM students ORDER BY student_id;"
@@ -102,8 +102,28 @@ def sandbox_execute(request):
     sql = (request.POST.get("sql") or "").strip()
     request.session["sandbox_sql"] = sql
 
+    form = SqlSubmissionForm({"sql": sql})
+    if not form.is_valid():
+        error = form.errors["sql"][0]
+        QueryHistory.objects.create(
+            user=request.user,
+            sql=sql,
+            status="error",
+            error_message=error,
+        )
+        request.session["sandbox_result"] = {
+            "success": False,
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "truncated": False,
+            "error": error,
+            "message": "Your query could not run.",
+        }
+        return redirect("sandbox")
+
     try:
-        result = run_query(sql)
+        result = run_query(form.cleaned_data["sql"])
     except QueryError as exc:
         with transaction.atomic():
             QueryHistory.objects.create(
@@ -159,6 +179,10 @@ def saved_query_create(request):
         if not title:
             messages.error(request, "A title is required for saving a query.")
             return redirect("saved_query_list")
+        form = SqlSubmissionForm({"sql": sql})
+        if not form.is_valid():
+            messages.error(request, form.errors["sql"][0])
+            return redirect("saved_query_list")
         if saved_query_title_exists(request.user, title):
             messages.error(request, DUPLICATE_TITLE_MESSAGE)
             return redirect("saved_query_list")
@@ -201,6 +225,14 @@ def saved_query_edit(request, pk):
         ):
             messages.error(request, DUPLICATE_TITLE_MESSAGE)
         else:
+            form = SqlSubmissionForm({"sql": saved_query.sql})
+            if not form.is_valid():
+                messages.error(request, form.errors["sql"][0])
+                return render(
+                    request,
+                    "dashboard/saved_query_form.html",
+                    {"page_title": "Edit Query", "saved_query": saved_query},
+                )
             try:
                 with transaction.atomic():
                     saved_query.save()

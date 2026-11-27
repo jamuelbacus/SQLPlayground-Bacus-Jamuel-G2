@@ -1,14 +1,11 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, connection, transaction
-from django.test import Client, SimpleTestCase, TestCase
+from django.db import IntegrityError
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
-
-from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
-
 from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
     MAX_ROWS,
@@ -19,9 +16,10 @@ from .engine import (
     schema_tables,
 )
 from .models import LessonProgress
-
 User = get_user_model()
-
+from django.db import IntegrityError, connection, transaction
+from django.test import Client, SimpleTestCase, TestCase
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 class SeedSchemaTests(SimpleTestCase):
     def test_schema_lists_three_tables_with_columns_and_rows(self):
@@ -54,7 +52,6 @@ class SeedSchemaTests(SimpleTestCase):
             {row[0] for row in course_rows.rows}
             - {row[0] for row in enrolled_course_rows.rows}
         )
-
 
 class RunQueryTests(SimpleTestCase):
     def test_select_returns_columns_and_rows(self):
@@ -119,7 +116,6 @@ class RunQueryTests(SimpleTestCase):
         with self.assertRaisesMessage(QueryError, "SQL error"):
             run_query("SELECT missing_column FROM students")
 
-
 class ResultsMatchTests(SimpleTestCase):
     def test_ordered_results_must_match_sequence(self):
         actual = QueryResult(["n"], [(2,), (1,)])
@@ -157,7 +153,6 @@ class ResultsMatchTests(SimpleTestCase):
 
         self.assertFalse(results_match(actual, expected, ordered=True))
 
-
 class CurriculumTests(SimpleTestCase):
     def test_curriculum_has_eight_lessons_in_order(self):
         self.assertEqual(len(LESSONS), 8)
@@ -191,7 +186,6 @@ class CurriculumTests(SimpleTestCase):
         self.assertEqual(next_lesson(LESSONS[0]), LESSONS[1])
         self.assertIsNone(next_lesson(LESSONS[-1]))
 
-
 class LessonProgressTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -217,7 +211,6 @@ class LessonProgressTests(TestCase):
             LessonProgress.objects.create(
                 user=self.user, lesson_slug="select-columns"
             )
-
 
 class LessonViewTests(TestCase):
     def setUp(self):
@@ -404,6 +397,20 @@ class LessonViewTests(TestCase):
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
 
+    def test_lesson_check_escapes_html_in_sql_and_error_text(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": 'SELECT * FROM "<script>alert(1)</script>"'},
+            follow=True,
+        )
+
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNone(progress.completed_at)
 
 class LessonCheckCsrfTests(TestCase):
     def setUp(self):
@@ -452,7 +459,6 @@ class LessonCheckCsrfTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNotNone(progress.completed_at)
-
 
 class LessonProgressIntegrityTests(TestCase):
     def setUp(self):

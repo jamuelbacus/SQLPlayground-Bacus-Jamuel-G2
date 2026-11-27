@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.decorators import role_required
 from accounts.models import CustomUser
+from dashboard.forms import SqlSubmissionForm
 
 from .curriculum import (
     LESSONS,
@@ -102,6 +103,7 @@ def lesson_check(request, slug):
         return redirect("lesson_detail", slug=slug)
 
     sql = (request.POST.get("sql") or "").strip()
+    form = SqlSubmissionForm({"sql": sql})
 
     with transaction.atomic():
         progress, _ = LessonProgress.objects.get_or_create(
@@ -123,34 +125,38 @@ def lesson_check(request, slug):
             "error": "",
         }
 
-        try:
-            actual = run_query(sql)
-            expected = run_query(lesson.reference_sql)
-            passed = results_match(actual, expected, lesson.ordered)
-            result.update(
-                {
-                    "passed": passed,
-                    "message": lesson.success_message
-                    if passed
-                    else (
-                        "Not quite yet. Compare your rows with the task and "
-                        "try again."
-                    ),
-                    "columns": actual.columns,
-                    "rows": actual.rows,
-                    "row_count": len(actual.rows),
-                    "truncated": actual.truncated,
-                }
-            )
-            if passed and progress.completed_at is None:
-                LessonProgress.objects.filter(pk=progress.pk).update(
-                    completed_at=timezone.now(),
-                    updated_at=timezone.now(),
-                )
-                progress.refresh_from_db()
-        except QueryError as exc:
+        if not form.is_valid():
+            result["error"] = form.errors["sql"][0]
             result["message"] = "Your query could not run."
-            result["error"] = str(exc)
+        else:
+            try:
+                actual = run_query(form.cleaned_data["sql"])
+                expected = run_query(lesson.reference_sql)
+                passed = results_match(actual, expected, lesson.ordered)
+                result.update(
+                    {
+                        "passed": passed,
+                        "message": lesson.success_message
+                        if passed
+                        else (
+                            "Not quite yet. Compare your rows with the task "
+                            "and try again."
+                        ),
+                        "columns": actual.columns,
+                        "rows": actual.rows,
+                        "row_count": len(actual.rows),
+                        "truncated": actual.truncated,
+                    }
+                )
+                if passed and progress.completed_at is None:
+                    LessonProgress.objects.filter(pk=progress.pk).update(
+                        completed_at=timezone.now(),
+                        updated_at=timezone.now(),
+                    )
+                    progress.refresh_from_db()
+            except QueryError as exc:
+                result["message"] = "Your query could not run."
+                result["error"] = str(exc)
 
     request.session[f"lesson_sql_{slug}"] = sql
     request.session[f"lesson_result_{slug}"] = result

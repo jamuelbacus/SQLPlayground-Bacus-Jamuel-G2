@@ -7,7 +7,6 @@ queries are limited to read-only statements.
 
 from __future__ import annotations
 
-import re
 import sqlite3
 import time
 from typing import NamedTuple
@@ -15,6 +14,13 @@ from typing import NamedTuple
 MAX_ROWS = 200
 MAX_SECONDS = 1.0
 MAX_STEPS = 1_000_000
+MAX_SQL_LENGTH = 5000
+
+BLANK_SQL_MESSAGE = "Please enter a SQL statement."
+TOO_LONG_SQL_MESSAGE = "SQL query is too long."
+NON_SELECT_SQL_MESSAGE = "Only SELECT queries are allowed in the SQL playground."
+MULTIPLE_STATEMENTS_MESSAGE = "Run one SQL statement at a time."
+READ_ONLY_DENIED_MESSAGE = "This query is not allowed. Use a read-only SQL statement."
 
 TABLE_NAMES = ("students", "courses", "enrollments")
 
@@ -132,25 +138,119 @@ def _authorizer(action, arg1, arg2, dbname, trigger):
     return sqlite3.SQLITE_OK if action in _ALLOWED_ACTIONS else sqlite3.SQLITE_DENY
 
 
-_LEADING_COMMENTS = re.compile(
-    r"\A(?:\s*(?:--[^\n]*(?:\n|$)|/\*.*?\*/))*", re.DOTALL
-)
+def _sql_code(sql: str) -> str:
+    """Blank comments while preserving literals, identifiers, and positions."""
+    output = []
+    index = 0
+    block_depth = 0
+    quote = None
+    while index < len(sql):
+        char = sql[index]
+        following = sql[index + 1] if index + 1 < len(sql) else ""
+
+        if quote is not None:
+            closing = "]" if quote == "[" else quote
+            output.append(char)
+            if char == closing:
+                if following == closing:
+                    output.append(following)
+                    index += 2
+                    continue
+                quote = None
+            index += 1
+            continue
+
+        if block_depth:
+            if char == "/" and following == "*":
+                block_depth += 1
+                output.extend("  ")
+                index += 2
+                continue
+            if char == "*" and following == "/":
+                block_depth -= 1
+                output.extend("  ")
+                index += 2
+                continue
+            output.append("\n" if char in "\r\n" else " ")
+            index += 1
+            continue
+
+        if char == "-" and following == "-":
+            output.extend("  ")
+            index += 2
+            while index < len(sql) and sql[index] not in "\r\n":
+                output.append(" ")
+                index += 1
+            continue
+        if char == "/" and following == "*":
+            block_depth = 1
+            output.extend("  ")
+            index += 2
+            continue
+        if char in ("'", '"', "`", "["):
+            quote = char
+        output.append(char)
+        index += 1
+    return "".join(output)
 
 
-def _first_keyword(sql: str) -> str:
-    cleaned = _LEADING_COMMENTS.sub("", sql).strip()
-    if not cleaned:
+def _skip_quoted(code: str, index: int, quote: str) -> int:
+    closing = "]" if quote == "[" else quote
+    index += 1
+    while index < len(code):
+        if code[index] == closing:
+            if index + 1 < len(code) and code[index + 1] == closing:
+                index += 2
+                continue
+            return index + 1
+        index += 1
+    return index
+
+
+def _has_multiple_statements(sql: str, code: str) -> bool:
+    index = 0
+    while index < len(code):
+        char = code[index]
+        if char in ("'", '"', "`", "["):
+            index = _skip_quoted(code, index, char)
+            continue
+        if char == ";" and sqlite3.complete_statement(
+            sql[: index + 1].replace("\r", "\n")
+        ):
+            if code[index + 1 :].strip():
+                return True
+        index += 1
+    return False
+
+
+def _first_keyword(code: str) -> str:
+    text = code.strip()
+    if not text:
         return ""
-    return cleaned.split(None, 1)[0].lower()
+    return text.split(None, 1)[0].lower()
+
+
+def validate_read_only_sql(sql: str) -> None:
+    """Check that learner SQL is one bounded, read-only statement."""
+    text = (sql or "").strip()
+    if not text:
+        raise QueryError(BLANK_SQL_MESSAGE)
+    if len(text) > MAX_SQL_LENGTH:
+        raise QueryError(TOO_LONG_SQL_MESSAGE)
+
+    code = _sql_code(text)
+    if not code.strip():
+        raise QueryError(BLANK_SQL_MESSAGE)
+    if _first_keyword(code) not in {"select", "with"}:
+        raise QueryError(NON_SELECT_SQL_MESSAGE)
+    if _has_multiple_statements(text, code):
+        raise QueryError(MULTIPLE_STATEMENTS_MESSAGE)
 
 
 def run_query(sql: str) -> QueryResult:
     """Run one read-only practice query and return its result."""
     text = (sql or "").strip()
-    if not text:
-        raise QueryError("Please enter a SQL statement.")
-    if _first_keyword(text) not in {"select", "with"}:
-        raise QueryError("Only SELECT queries are allowed in the SQL playground.")
+    validate_read_only_sql(text)
 
     connection = _build_connection()
     try:
@@ -182,6 +282,10 @@ def run_query(sql: str) -> QueryResult:
             raise QueryError(f"SQL error: {exc}") from exc
         except (sqlite3.ProgrammingError, sqlite3.Warning) as exc:
             raise QueryError("Run one SQL statement at a time.") from exc
+        except sqlite3.DatabaseError as exc:
+            if "not authorized" in str(exc).lower():
+                raise QueryError(READ_ONLY_DENIED_MESSAGE) from exc
+            raise QueryError(f"SQL error: {exc}") from exc
         except sqlite3.Error as exc:
             raise QueryError(f"SQL error: {exc}") from exc
     finally:
