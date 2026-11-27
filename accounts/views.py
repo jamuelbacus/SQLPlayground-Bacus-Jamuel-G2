@@ -4,6 +4,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 
+from .decorators import active_required
 from .forms import AccountLoginForm, ProfileForm, SignUpForm
 
 
@@ -59,12 +60,14 @@ class AccountLogoutView(LogoutView):
         return super().post(request, *args, **kwargs)
 
 
+@active_required
 @login_required
 def profile(request):
     """Show the logged-in user's own profile."""
     return render(request, "accounts/profile.html")
 
 
+@active_required
 @login_required
 def profile_edit(request):
     """Update the logged-in user's own profile."""
