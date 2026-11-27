@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -222,4 +224,38 @@ class SandboxCsrfTests(TestCase):
         self.assertRedirects(response, reverse("sandbox"))
         history = QueryHistory.objects.get(user=self.learner)
         self.assertEqual(history.status, "success")
+        self.assertEqual(QueryHistory.objects.count(), 1)
+
+
+class SandboxTransactionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="sandbox-tx",
+            email="sandbox-tx@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_history_failure_does_not_store_result_in_session(self):
+        with patch(
+            "dashboard.views.QueryHistory.objects.create",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("sandbox_execute"),
+                    {"sql": "SELECT first_name FROM students;"},
+                )
+
+        self.assertNotIn("sandbox_result", self.client.session)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_successful_execute_redirects_and_get_does_not_repeat(self):
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": "SELECT first_name FROM students;"},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        self.client.get(reverse("sandbox"))
         self.assertEqual(QueryHistory.objects.count(), 1)
