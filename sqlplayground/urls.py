@@ -10,6 +10,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
 
+from .views import custom_404, custom_500
+
+handler404 = custom_404
+handler500 = custom_500
+
 urlpatterns = [
     path("", include("accounts.urls")),
     path("lessons/", include("lessons.urls")),

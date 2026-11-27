@@ -248,13 +248,19 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 
 ## Testing
 
-Run the test suite:
+Activate the project virtual environment, then run the suite:
+
+```bash
+python manage.py test
+```
+
+The test command automatically selects in-memory SQLite, so the suite runs without connecting to Supabase or creating a local SQLite file. `settings_test` also skips startup validation, so no production credentials are needed. Normal application commands still use the configured PostgreSQL database and require the same environment variables as any other startup.
+
+The explicit compatibility command remains available:
 
 ```bash
 python manage.py test --settings=sqlplayground.settings_test
 ```
-
-`settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. It also skips startup validation, so no production credentials are needed. Running `python manage.py test` with the default settings still requires the same environment variables as any other startup.
 
 The current test suite contains 120 tests covering:
 

@@ -1,0 +1,14 @@
+{% extends "base_public.html" %}
+
+{% block title %}Server error | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="card empty-state">
+    <p class="eyebrow">500 &middot; Server Error</p>
+    <h1>Something went wrong.</h1>
+    <p class="muted">
+      The request could not be completed. Please try again in a moment.
+    </p>
+    <a class="btn btn-primary" href="{% url 'home' %}">Back to home</a>
+  </section>
+{% endblock %}
