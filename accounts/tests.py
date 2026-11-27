@@ -3,21 +3,21 @@ import tempfile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, connection, transaction
-from django.test import Client, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
-
-from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
-
+from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
+from dashboard.models import QueryHistory, SavedQuery
+from lessons.models import LessonProgress
 User = get_user_model()
-
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
 GIF_1X1 = (
     b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
     b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
     b"\x00\x02\x02D\x01\x00;"
 )
-
+from django.db import IntegrityError, connection, transaction
+from django.test import Client, TestCase, override_settings
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 class SignUpTests(TestCase):
     def setUp(self):
@@ -109,7 +109,6 @@ class SignUpTests(TestCase):
             reverse("dashboard"),
             fetch_redirect_response=False,
         )
-
 
 class LoginLogoutTests(TestCase):
     def setUp(self):
@@ -262,7 +261,6 @@ class LoginLogoutTests(TestCase):
 
         self.assertContains(response, "Username or email")
 
-
 class ProfileTests(TestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp()
@@ -350,6 +348,101 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
 
+class InactiveSessionAccessTests(TestCase):
+    def setUp(self):
+        self.login_url = reverse("login")
+        self.learner = User.objects.create_user(
+            username="inactive-learner",
+            email="inactive-learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.administrator = User.objects.create_user(
+            username="inactive-admin",
+            email="inactive-admin@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        self.target = User.objects.create_user(
+            username="target",
+            email="target@example.com",
+            password="Str0ngPass!234",
+        )
+        self.saved_query = SavedQuery.objects.create(
+            user=self.learner,
+            title="All students",
+            sql="SELECT * FROM students",
+        )
+
+    def assert_inactive_redirect(self, url, user):
+        self.client.force_login(user)
+        User.objects.filter(pk=user.pk).update(is_active=False)
+
+        response = self.client.get(url, follow=True)
+
+        self.assertEqual(response.redirect_chain[0][0], self.login_url)
+        self.assertContains(response, INACTIVE_ACCOUNT_MESSAGE)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_deactivated_learner_is_redirected_from_role_protected_pages(self):
+        for url in (
+            reverse("learner_dashboard"),
+            reverse("sandbox"),
+            reverse("saved_query_list"),
+            reverse("saved_query_create"),
+            reverse("saved_query_detail", args=[self.saved_query.pk]),
+            reverse("saved_query_edit", args=[self.saved_query.pk]),
+            reverse("saved_query_delete", args=[self.saved_query.pk]),
+            reverse("lesson_index"),
+            reverse("lesson_detail", args=["select-columns"]),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.learner)
+
+    def test_deactivated_administrator_is_redirected_from_user_management(self):
+        for url in (
+            reverse("administrator_dashboard"),
+            reverse("manage_users"),
+            reverse("user_create"),
+            reverse("user_edit", args=[self.target.pk]),
+            reverse("user_password", args=[self.target.pk]),
+            reverse("user_delete", args=[self.target.pk]),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.administrator)
+
+    def test_active_users_keep_their_existing_access(self):
+        self.client.force_login(self.learner)
+        self.assertEqual(self.client.get(reverse("sandbox")).status_code, 200)
+
+        self.client.force_login(self.administrator)
+        self.assertEqual(self.client.get(reverse("manage_users")).status_code, 200)
+
+    def test_deactivated_user_is_redirected_from_direct_login_pages(self):
+        for url in (
+            reverse("dashboard"),
+            reverse("profile"),
+            reverse("profile_edit"),
+        ):
+            with self.subTest(url=url):
+                self.assert_inactive_redirect(url, self.learner)
+
+    def test_deactivated_learner_cannot_post_to_sandbox_or_lesson_check(self):
+        for url, data in (
+            (reverse("sandbox_execute"), {"sql": "SELECT 1"}),
+            (reverse("lesson_check", args=["select-columns"]), {"sql": "SELECT 1"}),
+        ):
+            with self.subTest(url=url):
+                self.client.force_login(self.learner)
+                User.objects.filter(pk=self.learner.pk).update(is_active=False)
+
+                response = self.client.post(url, data, follow=True)
+
+                self.assertEqual(response.redirect_chain[0][0], self.login_url)
+                self.assertContains(response, INACTIVE_ACCOUNT_MESSAGE)
+                self.assertNotIn("_auth_user_id", self.client.session)
+
+        self.assertFalse(QueryHistory.objects.exists())
+        self.assertFalse(LessonProgress.objects.exists())
 
 class AccountCsrfTests(TestCase):
     def setUp(self):
@@ -482,7 +575,6 @@ class AccountCsrfTests(TestCase):
         self.assertRedirects(response, reverse("profile"))
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "changed@example.com")
-
 
 class UserRoleConstraintTests(TestCase):
     def test_invalid_role_is_rejected_at_database_level(self):

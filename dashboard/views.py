@@ -7,7 +7,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
-from accounts.decorators import role_required
+from accounts.decorators import active_required, role_required
 from accounts.models import CustomUser
 from lessons.curriculum import LESSONS
 from lessons.engine import QueryError, run_query, schema_tables
@@ -28,6 +28,7 @@ def saved_query_title_exists(user, title, exclude_pk=None):
     return queryset.exists()
 
 
+@active_required
 @login_required
 def dashboard_redirect(request):
     """Send each user to the dashboard that belongs to their role."""
