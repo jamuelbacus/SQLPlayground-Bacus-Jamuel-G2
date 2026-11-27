@@ -3,9 +3,10 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import QueryHistory, SavedQuery
-
 User = get_user_model()
-
+from unittest.mock import patch
+from django.test import Client, TestCase
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 class SandboxAccessTests(TestCase):
     def setUp(self):
@@ -52,7 +53,6 @@ class SandboxAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 301)
         self.assertEqual(response.url, reverse("sandbox"))
-
 
 class SandboxExecutionTests(TestCase):
     def setUp(self):
@@ -121,7 +121,6 @@ class SandboxExecutionTests(TestCase):
         response = self.client.get(reverse("sandbox"))
 
         self.assertContains(response, "SELECT course_name FROM courses;")
-
 
 class SavedQueryTests(TestCase):
     def setUp(self):
@@ -251,3 +250,80 @@ class SavedQueryTests(TestCase):
 
         self.assertRedirects(response, reverse("saved_query_list"))
         self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
+
+class SandboxCsrfTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.learner = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+        self.sql = "SELECT first_name FROM students;"
+
+    def test_execute_rejects_post_without_token(self):
+        response = self.client.post(
+            reverse("sandbox_execute"), {"sql": self.sql}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_rejects_invalid_token(self):
+        token = csrf_token_from_response(
+            self.client.get(reverse("sandbox")), reverse("sandbox_execute")
+        )
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": self.sql, "csrfmiddlewaretoken": f"invalid-{token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_accepts_valid_token(self):
+        response = post_with_csrf_token(
+            self.client,
+            reverse("sandbox"),
+            reverse("sandbox_execute"),
+            {"sql": self.sql},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        history = QueryHistory.objects.get(user=self.learner)
+        self.assertEqual(history.status, "success")
+        self.assertEqual(QueryHistory.objects.count(), 1)
+
+class SandboxTransactionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="sandbox-tx",
+            email="sandbox-tx@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_history_failure_does_not_store_result_in_session(self):
+        with patch(
+            "dashboard.views.QueryHistory.objects.create",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("sandbox_execute"),
+                    {"sql": "SELECT first_name FROM students;"},
+                )
+
+        self.assertNotIn("sandbox_result", self.client.session)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_successful_execute_redirects_and_get_does_not_repeat(self):
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": "SELECT first_name FROM students;"},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        self.client.get(reverse("sandbox"))
+        self.assertEqual(QueryHistory.objects.count(), 1)
