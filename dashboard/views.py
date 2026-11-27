@@ -165,11 +165,39 @@ def sandbox_execute(request):
 
 @role_required(CustomUser.Role.LEARNER)
 def saved_query_list(request):
+    paginator = Paginator(
+        request.user.saved_queries.select_related("user").all(), 10
+    )
+    params = request.GET.copy()
+    params.pop("page", None)
+    page_obj = paginator.get_page(request.GET.get("page"))
     return render(
         request,
         "dashboard/saved_query_list.html",
         {
-            "saved_queries": request.user.saved_queries.select_related("user").all()
+            "saved_queries": page_obj,
+            "page_obj": page_obj,
+            "querystring": params.urlencode(),
+        },
+    )
+
+
+@role_required(CustomUser.Role.LEARNER)
+def query_history_list(request):
+    """Show the learner's full, paginated query history."""
+    paginator = Paginator(
+        request.user.query_history.select_related("user").all(), 10
+    )
+    params = request.GET.copy()
+    params.pop("page", None)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    return render(
+        request,
+        "dashboard/history.html",
+        {
+            "query_history": page_obj,
+            "page_obj": page_obj,
+            "querystring": params.urlencode(),
         },
     )
 
@@ -289,7 +317,7 @@ def administrator_dashboard(request):
 @role_required(CustomUser.Role.ADMINISTRATOR)
 def manage_users(request):
     """List, search, and filter every account."""
-    users = CustomUser.objects.order_by("-date_joined")
+    users = CustomUser.objects.order_by("-date_joined", "-pk")
     query = request.GET.get("q", "").strip()
     role = request.GET.get("role", "").strip()
     status = request.GET.get("status", "").strip()

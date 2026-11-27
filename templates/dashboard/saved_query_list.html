@@ -12,9 +12,9 @@
   </section>
 
   <div class="card">
-    {% if saved_queries %}
+    {% if page_obj.object_list %}
       <ul class="list-stack">
-        {% for query in saved_queries %}
+        {% for query in page_obj %}
           <li>
             <div>
               <strong>{{ query.title }}</strong>
@@ -28,6 +28,18 @@
           </li>
         {% endfor %}
       </ul>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="pagination" aria-label="Saved query pages">
+          {% if page_obj.has_previous %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+          {% endif %}
+          <span class="is-current">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+          {% endif %}
+        </nav>
+      {% endif %}
     {% else %}
       <p class="muted">No saved queries yet. Create one from the Sandbox.</p>
     {% endif %}

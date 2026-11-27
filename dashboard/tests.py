@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from dashboard.models import QueryHistory, SavedQuery
 User = get_user_model()
@@ -13,7 +14,6 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.models import PositiveIntegerField
 from django.db.models.query import QuerySet
 from django.test import Client, TestCase, TransactionTestCase
-from django.utils import timezone
 from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 from .models import QueryHistory, SavedQuery
 from .views import _is_last_active_administrator
@@ -400,6 +400,145 @@ class UserManagementTests(TestCase):
         self.assertEqual(self.learner.username, "LEARNER1")
         self.assertEqual(self.learner.email, "learner1@example.com")
 
+class PaginationTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="learner",
+            email="learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.other = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password="Str0ngPass!234",
+        )
+        self.administrator = User.objects.create_user(
+            username="admin",
+            email="admin@example.com",
+            password="Str0ngPass!234",
+            role=User.Role.ADMINISTRATOR,
+        )
+        for index in range(3):
+            SavedQuery.objects.create(
+                user=self.other, title=f"Theirs {index}", sql="SELECT 2;"
+            )
+            QueryHistory.objects.create(user=self.other, sql="SELECT 999;")
+        for index in range(25):
+            SavedQuery.objects.create(
+                user=self.learner, title=f"Mine {index}", sql="SELECT 1;"
+            )
+            QueryHistory.objects.create(user=self.learner, sql=f"SELECT {index};")
+        self.client.force_login(self.learner)
+
+    def test_saved_query_list_pages_are_boundary_correct_and_user_scoped(self):
+        first = self.client.get(reverse("saved_query_list"))
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.context["page_obj"].paginator.count, 25)
+        self.assertEqual(len(first.context["page_obj"].object_list), 10)
+        self.assertTrue(first.context["page_obj"].has_next())
+        self.assertNotContains(first, "Theirs 0")
+
+        second = self.client.get(reverse("saved_query_list"), {"page": 2})
+        self.assertEqual(second.context["page_obj"].number, 2)
+        self.assertEqual(len(second.context["page_obj"].object_list), 10)
+        self.assertNotContains(second, "Theirs 0")
+
+        third = self.client.get(reverse("saved_query_list"), {"page": 3})
+        self.assertEqual(len(third.context["page_obj"].object_list), 5)
+        self.assertFalse(third.context["page_obj"].has_next())
+        self.assertNotContains(third, "Theirs 0")
+
+    def test_saved_query_list_handles_invalid_page_numbers(self):
+        out_of_range = self.client.get(reverse("saved_query_list"), {"page": 999})
+        self.assertEqual(out_of_range.status_code, 200)
+        self.assertEqual(out_of_range.context["page_obj"].number, 3)
+        self.assertEqual(len(out_of_range.context["page_obj"].object_list), 5)
+
+        malformed = self.client.get(reverse("saved_query_list"), {"page": "abc"})
+        self.assertEqual(malformed.status_code, 200)
+        self.assertEqual(malformed.context["page_obj"].number, 1)
+
+    def test_saved_query_list_preserves_query_parameters(self):
+        response = self.client.get(
+            reverse("saved_query_list"), {"view": "compact", "page": 2}
+        )
+
+        self.assertEqual(response.context["querystring"], "view=compact")
+        self.assertContains(response, "view=compact")
+        self.assertEqual(len(response.context["saved_queries"].object_list), 10)
+
+    def test_query_history_page_is_paginated_and_user_scoped(self):
+        first = self.client.get(reverse("query_history_list"))
+        self.assertEqual(first.status_code, 200)
+        self.assertTemplateUsed(first, "dashboard/history.html")
+        self.assertEqual(first.context["page_obj"].paginator.count, 25)
+        self.assertEqual(len(first.context["page_obj"].object_list), 10)
+        self.assertNotContains(first, "SELECT 999;")
+
+        last = self.client.get(reverse("query_history_list"), {"page": 3})
+        self.assertEqual(len(last.context["page_obj"].object_list), 5)
+        self.assertFalse(last.context["page_obj"].has_next())
+        self.assertNotContains(last, "SELECT 999;")
+
+    def test_query_history_page_handles_invalid_page_numbers(self):
+        out_of_range = self.client.get(reverse("query_history_list"), {"page": 999})
+        self.assertEqual(out_of_range.status_code, 200)
+        self.assertEqual(out_of_range.context["page_obj"].number, 3)
+
+        malformed = self.client.get(reverse("query_history_list"), {"page": "abc"})
+        self.assertEqual(malformed.status_code, 200)
+        self.assertEqual(malformed.context["page_obj"].number, 1)
+
+    def test_query_history_page_shows_empty_state(self):
+        empty_user = User.objects.create_user(
+            username="empty",
+            email="empty@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(empty_user)
+
+        response = self.client.get(reverse("query_history_list"))
+
+        self.assertEqual(response.context["page_obj"].paginator.count, 0)
+        self.assertContains(response, "No query history yet.")
+
+    def test_manage_users_ordering_breaks_date_ties_by_pk(self):
+        shared_date = timezone.now()
+        for index in range(1, 4):
+            User.objects.create_user(
+                username=f"tie{index}",
+                email=f"tie{index}@example.com",
+                password="Str0ngPass!234",
+                date_joined=shared_date,
+            )
+        self.client.force_login(self.administrator)
+
+        response = self.client.get(reverse("manage_users"))
+        usernames = [user.username for user in response.context["page_obj"].object_list]
+
+        self.assertLess(usernames.index("tie3"), usernames.index("tie2"))
+        self.assertLess(usernames.index("tie2"), usernames.index("tie1"))
+
+    def test_manage_users_preserves_filters_across_pages(self):
+        self.client.force_login(self.administrator)
+        for index in range(25):
+            User.objects.create_user(
+                username=f"filtered{index}",
+                email=f"filtered{index}@example.com",
+                password="Str0ngPass!234",
+            )
+
+        response = self.client.get(
+            reverse("manage_users"),
+            {"q": "filtered", "role": "LEARNER", "page": 2},
+        )
+
+        self.assertEqual(response.context["page_obj"].number, 2)
+        self.assertIn("q=filtered", response.context["querystring"])
+        self.assertIn("role=LEARNER", response.context["querystring"])
+        self.assertNotIn("page=", response.context["querystring"])
+        self.assertContains(response, "q=filtered")
+
 class QueryCountRegressionTests(TestCase):
     def setUp(self):
         self.learner = User.objects.create_user(
@@ -447,7 +586,7 @@ class QueryCountRegressionTests(TestCase):
     def test_saved_query_list_query_count(self):
         self.client.force_login(self.learner)
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             response = self.client.get(reverse("saved_query_list"))
 
         self.assertEqual(response.status_code, 200)
