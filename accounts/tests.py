@@ -1,10 +1,13 @@
+from io import BytesIO
+
 import shutil
 import tempfile
-
-from django.contrib.auth import HASH_SESSION_KEY, get_user_model
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
+from accounts.forms import ProfileForm
 User = get_user_model()
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
 GIF_1X1 = (
@@ -12,7 +15,7 @@ GIF_1X1 = (
     b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
     b"\x00\x02\x02D\x01\x00;"
 )
-from django.contrib.auth import get_user_model
+from django.contrib.auth import HASH_SESSION_KEY, get_user_model
 from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
 from dashboard.models import QueryHistory, SavedQuery
 from lessons.models import LessonProgress
@@ -348,6 +351,224 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+class ContactNumberValidationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="jamuel",
+            email="jamuel@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.user)
+
+    def test_profile_form_saves_a_valid_contact_number(self):
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+            },
+            instance=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().contact_number, "+639171234567")
+
+    def test_profile_form_rejects_an_invalid_contact_number(self):
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "abc123",
+            },
+            instance=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["contact_number"],
+            ["Enter a valid contact number (7-15 digits, optional leading +)."],
+        )
+
+    def test_profile_view_rejects_invalid_contact_number_without_saving(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("contact_number", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.contact_number, "")
+
+    def test_profile_update_ignores_privilege_fields(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+                "role": User.Role.ADMINISTRATOR,
+                "is_staff": "on",
+                "is_superuser": "on",
+                "is_active": "",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.role, User.Role.LEARNER)
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
+        self.assertTrue(self.user.is_active)
+        self.assertEqual(self.user.contact_number, "+639171234567")
+
+class ProfilePhotoValidationTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media_root, ignore_errors=True)
+        self.settings_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+
+        self.user = User.objects.create_user(
+            username="jamuel",
+            email="jamuel@example.com",
+            password="Str0ngPass!234",
+        )
+
+    @staticmethod
+    def png_bytes(size):
+        buffer = BytesIO()
+        Image.new("RGB", size, "white").save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def photo_form(self, photo):
+        return ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+            },
+            {"profile_photo": photo},
+            instance=self.user,
+        )
+
+    def test_valid_profile_photo_is_accepted(self):
+        form = self.photo_form(
+            SimpleUploadedFile("avatar.gif", GIF_1X1, content_type="image/gif")
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.save().profile_photo.name.endswith("avatar.gif"))
+
+    def test_corrupt_image_shows_an_inline_error(self):
+        form = self.photo_form(
+            SimpleUploadedFile(
+                "broken.png", b"not an image", content_type="image/png"
+            )
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("profile_photo", form.errors)
+
+    def test_oversized_file_is_rejected(self):
+        payload = self.png_bytes((10, 10)) + b"x" * (2 * 1024 * 1024 + 1)
+        form = self.photo_form(
+            SimpleUploadedFile("big.png", payload, content_type="image/png")
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["profile_photo"], ["Profile photo must be 2 MB or smaller."]
+        )
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.profile_photo)
+
+    def test_oversized_dimensions_are_rejected(self):
+        form = self.photo_form(
+            SimpleUploadedFile(
+                "wide.png", self.png_bytes((2001, 10)), content_type="image/png"
+            )
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["profile_photo"],
+            ["Profile photo dimensions must not exceed 2000 pixels."],
+        )
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.profile_photo)
+
+    def test_existing_oversized_photo_does_not_block_profile_update(self):
+        self.user.profile_photo.save(
+            "legacy.png",
+            SimpleUploadedFile(
+                "legacy.png", self.png_bytes((2001, 10)), content_type="image/png"
+            ),
+            save=True,
+        )
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+            },
+            instance=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(
+            form.cleaned_data["profile_photo"].name, "profile_photos/legacy.png"
+        )
+
+    def test_existing_corrupt_photo_does_not_block_profile_update(self):
+        self.user.profile_photo.save(
+            "broken-stored.png",
+            SimpleUploadedFile(
+                "broken-stored.png", b"not an image", content_type="image/png"
+            ),
+            save=True,
+        )
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+            },
+            instance=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_photo_at_the_size_limit_is_accepted(self):
+        payload = self.png_bytes((10, 10))
+        payload += b"x" * (2 * 1024 * 1024 - len(payload))
+        form = self.photo_form(
+            SimpleUploadedFile("limit.png", payload, content_type="image/png")
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_photo_at_the_dimension_limit_is_accepted(self):
+        form = self.photo_form(
+            SimpleUploadedFile(
+                "limit.png", self.png_bytes((2000, 10)), content_type="image/png"
+            )
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
 
 class PasswordChangeTests(TestCase):
     def setUp(self):
