@@ -1,3 +1,5 @@
+import sqlite3
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -6,9 +8,9 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils.html import escape
 from django.utils import timezone
-
 from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
+    _authorizer,
     MAX_ROWS,
     QueryError,
     QueryResult,
@@ -17,9 +19,10 @@ from .engine import (
     schema_tables,
 )
 from .models import LessonProgress
-
 User = get_user_model()
-
+from django.db import IntegrityError, connection, transaction
+from django.test import Client, SimpleTestCase, TestCase
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 class SeedSchemaTests(SimpleTestCase):
     def test_schema_lists_three_tables_with_columns_and_rows(self):
@@ -52,7 +55,6 @@ class SeedSchemaTests(SimpleTestCase):
             {row[0] for row in course_rows.rows}
             - {row[0] for row in enrolled_course_rows.rows}
         )
-
 
 class RunQueryTests(SimpleTestCase):
     def test_select_returns_columns_and_rows(self):
@@ -117,6 +119,67 @@ class RunQueryTests(SimpleTestCase):
         with self.assertRaisesMessage(QueryError, "SQL error"):
             run_query("SELECT missing_column FROM students")
 
+    def test_disallowed_function_is_denied(self):
+        with self.assertRaisesMessage(QueryError, "not authorized"):
+            run_query("SELECT sqlite_version()")
+
+    def test_lesson_aggregate_functions_remain_available(self):
+        result = run_query(
+            "SELECT COUNT(*), SUM(credits) FROM courses"
+        )
+
+        self.assertEqual(result.rows, [(5, 15)])
+
+    def test_like_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name LIKE 'A%'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_glob_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name GLOB 'A*'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_attach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("ATTACH DATABASE ':memory:' AS other")
+
+    def test_detach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("DETACH DATABASE other")
+
+    def test_progress_handler_does_not_interrupt_single_function_call(self):
+        """SQLite checks progress between VM steps, not inside a function call.
+
+        This is why the function allowlist matters: one expensive C-level
+        helper would keep running even after the guard would trip.
+        """
+        connection = sqlite3.connect(":memory:")
+        progress_calls = []
+
+        def observe_progress():
+            progress_calls.append(1)
+            return 0
+
+        def long_call():
+            calls_before = len(progress_calls)
+            deadline = time.monotonic() + 0.01
+            while time.monotonic() < deadline:
+                pass
+            self.assertEqual(len(progress_calls), calls_before)
+            return "done"
+
+        connection.create_function("long_call", 0, long_call)
+        connection.set_progress_handler(observe_progress, 1)
+
+        self.assertEqual(
+            connection.execute("SELECT long_call()").fetchone(), ("done",)
+        )
+        self.assertTrue(progress_calls)
 
 class ResultsMatchTests(SimpleTestCase):
     def test_ordered_results_must_match_sequence(self):
@@ -155,7 +218,6 @@ class ResultsMatchTests(SimpleTestCase):
 
         self.assertFalse(results_match(actual, expected, ordered=True))
 
-
 class CurriculumTests(SimpleTestCase):
     def test_curriculum_has_eight_lessons_in_order(self):
         self.assertEqual(len(LESSONS), 8)
@@ -189,7 +251,6 @@ class CurriculumTests(SimpleTestCase):
         self.assertEqual(next_lesson(LESSONS[0]), LESSONS[1])
         self.assertIsNone(next_lesson(LESSONS[-1]))
 
-
 class LessonProgressTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -215,7 +276,6 @@ class LessonProgressTests(TestCase):
             LessonProgress.objects.create(
                 user=self.user, lesson_slug="select-columns"
             )
-
 
 class LessonViewTests(TestCase):
     def setUp(self):
@@ -401,3 +461,133 @@ class LessonViewTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
+
+    def test_lesson_check_escapes_html_in_sql_and_error_text(self):
+        response = self.client.post(
+            reverse("lesson_check", args=["select-columns"]),
+            {"sql": 'SELECT * FROM "<script>alert(1)</script>"'},
+            follow=True,
+        )
+
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNone(progress.completed_at)
+
+class AuthorizerTests(SimpleTestCase):
+    def test_attach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_ATTACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
+
+    def test_detach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_DETACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
+
+    def test_function_names_are_matched_case_insensitively(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_FUNCTION, None, "COUNT", None, None),
+            sqlite3.SQLITE_OK,
+        )
+
+    def test_missing_function_name_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_FUNCTION, None, None, None, None),
+            sqlite3.SQLITE_DENY,
+        )
+
+class LessonCheckCsrfTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.learner = User.objects.create_user(
+            username="learner",
+            email="learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+        self.slug = "select-columns"
+        self.sql = "SELECT first_name, last_name FROM students;"
+
+    def test_check_rejects_post_without_token(self):
+        response = self.client.post(
+            reverse("lesson_check", args=[self.slug]), {"sql": self.sql}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(LessonProgress.objects.exists())
+
+    def test_check_rejects_invalid_token(self):
+        token = csrf_token_from_response(
+            self.client.get(reverse("lesson_detail", args=[self.slug])),
+            reverse("lesson_check", args=[self.slug]),
+        )
+        response = self.client.post(
+            reverse("lesson_check", args=[self.slug]),
+            {"sql": self.sql, "csrfmiddlewaretoken": f"invalid-{token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(LessonProgress.objects.exists())
+
+    def test_check_accepts_valid_token(self):
+        response = post_with_csrf_token(
+            self.client,
+            reverse("lesson_detail", args=[self.slug]),
+            reverse("lesson_check", args=[self.slug]),
+            {"sql": self.sql},
+        )
+
+        self.assertRedirects(response, reverse("lesson_detail", args=[self.slug]))
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug=self.slug
+        )
+        self.assertEqual(progress.attempts, 1)
+        self.assertIsNotNone(progress.completed_at)
+
+class LessonProgressIntegrityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="integrity-learner",
+            email="integrity-learner@example.com",
+            password="Str0ngPass!234",
+        )
+
+    def test_unknown_lesson_slug_is_rejected_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                LessonProgress.objects.create(
+                    user=self.user,
+                    lesson_slug="not-a-lesson",
+                )
+
+    def test_every_curriculum_slug_is_accepted(self):
+        for lesson in LESSONS:
+            with self.subTest(lesson=lesson.slug):
+                LessonProgress.objects.create(
+                    user=self.user,
+                    lesson_slug=lesson.slug,
+                )
+
+        self.assertEqual(
+            LessonProgress.objects.filter(user=self.user).count(), len(LESSONS)
+        )
+
+    def test_completed_progress_index_is_declared(self):
+        index = next(
+            index
+            for index in LessonProgress._meta.indexes
+            if index.name == "lessonprogress_done_idx"
+        )
+
+        self.assertEqual(index.fields, ["user", "completed_at"])
+        with connection.cursor() as cursor:
+            constraints = connection.introspection.get_constraints(
+                cursor, LessonProgress._meta.db_table
+            )
+        self.assertIn("lessonprogress_done_idx", constraints)
