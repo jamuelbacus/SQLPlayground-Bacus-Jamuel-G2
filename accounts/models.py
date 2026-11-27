@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
+from django.db.models import Q
 
 
 class CustomUser(AbstractUser):
@@ -34,6 +35,20 @@ class CustomUser(AbstractUser):
         blank=True,
         null=True,
     )
+
+    class Meta(AbstractUser.Meta):
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(role__in=("LEARNER", "ADMINISTRATOR")),
+                name="customuser_role_valid",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["role", "is_active"],
+                name="customuser_role_active_idx",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         # Superusers are always administrators, even if created through

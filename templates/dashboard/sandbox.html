@@ -134,6 +134,7 @@
       <details class="rail-section">
         <summary>Query history</summary>
         <div class="rail-body">
+          <p class="muted"><a class="text-link" href="{% url 'query_history_list' %}">View all history</a></p>
           {% if query_history %}
             <ul class="list-stack">
               {% for query in query_history %}

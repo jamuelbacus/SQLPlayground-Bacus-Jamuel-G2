@@ -1,0 +1,51 @@
+{% extends "base_app.html" %}
+
+{% block title %}Query History | SQL Playground{% endblock %}
+
+{% block content %}
+  <section class="page-head">
+    <div>
+      <h1>Query History</h1>
+      <p class="muted">Review the SQL statements you have run in the sandbox.</p>
+    </div>
+    <a href="{% url 'sandbox' %}" class="btn btn-secondary">Back to Sandbox</a>
+  </section>
+
+  <div class="card">
+    {% if page_obj.object_list %}
+      <ul class="list-stack">
+        {% for item in page_obj %}
+          <li>
+            <div>
+              <strong>{{ item.executed_at|date:"M d, Y H:i" }}</strong>
+              <div class="sql-snippet">{{ item.sql|truncatechars:120 }}</div>
+              <span class="badge">{{ item.get_status_display }}</span>
+              {% if item.status == "error" %}
+                <p class="muted">{{ item.error_message }}</p>
+              {% else %}
+                <p class="muted">{{ item.row_count }} row{{ item.row_count|pluralize }}</p>
+              {% endif %}
+            </div>
+            <div class="inline-actions">
+              <a href="{% url 'sandbox' %}?sql={{ item.sql|urlencode }}" class="link-button">Load</a>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="pagination" aria-label="History pages">
+          {% if page_obj.has_previous %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+          {% endif %}
+          <span class="is-current">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}
+            <a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% else %}
+      <p class="muted">No query history yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

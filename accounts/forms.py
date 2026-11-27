@@ -1,8 +1,33 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    PasswordChangeForm,
+    UserCreationForm,
+)
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile
+from PIL import Image
 
 from .models import CustomUser
+
+MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+MAX_PROFILE_PHOTO_DIMENSION = 2000
+
+
+def validate_profile_photo(photo):
+    """Apply the application's explicit profile-photo limits to new uploads."""
+    if not isinstance(photo, UploadedFile):
+        return photo
+    if photo.size > MAX_PROFILE_PHOTO_BYTES:
+        raise ValidationError("Profile photo must be 2 MB or smaller.")
+    try:
+        with Image.open(photo) as image:
+            width, height = image.size
+    finally:
+        photo.seek(0)
+    if max(width, height) > MAX_PROFILE_PHOTO_DIMENSION:
+        raise ValidationError("Profile photo dimensions must not exceed 2000 pixels.")
+    return photo
 
 
 class SignUpForm(UserCreationForm):
@@ -137,14 +162,20 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = CustomUser
-        fields = ("first_name", "last_name", "email", "profile_photo")
+        fields = ("first_name", "last_name", "email", "contact_number", "profile_photo")
         widgets = {
             "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+            "contact_number": forms.TextInput(
+                attrs={"placeholder": "+639171234567", "autocomplete": "tel"}
+            ),
             "profile_photo": forms.ClearableFileInput(attrs={"accept": "image/*"}),
         }
-        labels = {"profile_photo": "Profile photo"}
+        labels = {
+            "profile_photo": "Profile photo",
+            "contact_number": "Contact number",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -173,3 +204,21 @@ class ProfileForm(forms.ModelForm):
         if commit and old_name and old_name != new_name:
             user.profile_photo.storage.delete(old_name)
         return user
+
+    def clean_profile_photo(self):
+        return validate_profile_photo(self.cleaned_data["profile_photo"])
+
+
+class AccountPasswordChangeForm(PasswordChangeForm):
+    """Password change form styled like the project's other account forms."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["old_password"].widget.attrs.update(
+            {"autocomplete": "current-password", "autofocus": True}
+        )
+        self.fields["new_password1"].widget.attrs["autocomplete"] = "new-password"
+        self.fields["new_password2"].widget.attrs["autocomplete"] = "new-password"
+        self.fields["new_password2"].label = "Confirm new password"
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-input")

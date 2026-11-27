@@ -139,22 +139,40 @@ pip install -r requirements.txt
 
 ### 4. Configure environment variables
 
-Create a `.env` file in the project root:
+Copy the committed template to a `.env` file in the project root and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+The template contains:
 
 ```dotenv
-SECRET_KEY=your-secret-key
-DEBUG=True
+# Copy this file to .env and fill in real values. Never commit .env.
+
+# Django secret key. Generate one with:
+# python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+SECRET_KEY=replace-with-a-generated-secret-key
+
+# Set to True only for local development. Defaults to False.
+DEBUG=False
+
+# Comma-separated hostnames. Defaults to 127.0.0.1,localhost.
 ALLOWED_HOSTS=127.0.0.1,localhost
+
+# Comma-separated trusted origins for CSRF. Safe to leave empty locally.
 CSRF_TRUSTED_ORIGINS=
 
+# PostgreSQL (Supabase) connection settings.
+# DB_NAME and DB_PORT have safe defaults when omitted.
 DB_NAME=postgres
-DB_USER=your-database-user
-DB_PASSWORD=your-database-password
-DB_HOST=your-database-host
+DB_USER=replace-with-database-user
+DB_PASSWORD=replace-with-database-password
+DB_HOST=replace-with-database-host
 DB_PORT=5432
 ```
 
-Generate a Django secret key:
+Replace every `replace-with-*` placeholder before the first run. Generate a Django secret key:
 
 ```bash
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
@@ -171,6 +189,8 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 | `DB_PASSWORD` | Database password |
 | `DB_HOST` | Database host |
 | `DB_PORT` | Database port (default: 5432) |
+
+Startup with the default settings fails fast when `SECRET_KEY`, `DB_USER`, `DB_PASSWORD`, or `DB_HOST` is missing; the error names every missing variable. `.env` stays ignored by Git. The test settings module skips this validation, so the suite runs with `--settings=sqlplayground.settings_test` and no production credentials.
 
 ### 5. Apply database migrations
 
@@ -228,15 +248,21 @@ Open [http://127.0.0.1:8000/](http://127.0.0.1:8000/) in your browser.
 
 ## Testing
 
-Run the test suite:
+Activate the project virtual environment, then run the suite:
+
+```bash
+python manage.py test
+```
+
+The test command automatically selects in-memory SQLite, so the suite runs without connecting to Supabase or creating a local SQLite file. `settings_test` also skips startup validation, so no production credentials are needed. Normal application commands still use the configured PostgreSQL database and require the same environment variables as any other startup.
+
+The explicit compatibility command remains available:
 
 ```bash
 python manage.py test --settings=sqlplayground.settings_test
 ```
 
-`settings_test` swaps in a local SQLite database so the suite runs without connecting to Supabase. Production settings are unchanged, so `python manage.py test` still uses the configured PostgreSQL database.
-
-The current test suite contains 114 tests covering:
+The current test suite contains 120 tests covering:
 
 - Registration and input validation
 - Password hashing
@@ -249,11 +275,13 @@ The current test suite contains 114 tests covering:
 - Guided lesson curriculum, grading, attempt counts, and completion
 - Sandbox isolation from application tables, row limits, timeouts, and history
 - Permanent redirect from the old learning route to the sandbox
+- Configuration template and fail-fast validation of required environment variables
 
 ## Project Structure
 
 ```text
 .
+├── .env.example     # Committed template of supported environment variables
 ├── accounts/        # Authentication, roles, profiles, and account tests
 ├── dashboard/       # Role dashboards, sandbox, saved queries, user management
 │   └── migrations/  # QueryHistory and SavedQuery schema
