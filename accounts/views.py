@@ -1,11 +1,17 @@
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
 
 from .decorators import active_required
-from .forms import AccountLoginForm, ProfileForm, SignUpForm
+from .forms import (
+    AccountLoginForm,
+    AccountPasswordChangeForm,
+    ProfileForm,
+    SignUpForm,
+)
 
 
 def home(request):
@@ -82,3 +88,20 @@ def profile_edit(request):
         form = ProfileForm(instance=request.user)
 
     return render(request, "accounts/profile_edit.html", {"form": form})
+
+
+@login_required
+def password_change(request):
+    """Change the logged-in user's own password."""
+    if request.method == "POST":
+        form = AccountPasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)
+            messages.success(request, "Your password was changed successfully.")
+            return redirect("profile")
+        messages.error(request, "Please correct the errors below.")
+    else:
+        form = AccountPasswordChangeForm(request.user)
+
+    return render(request, "accounts/password_change.html", {"form": form})

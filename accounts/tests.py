@@ -1,13 +1,10 @@
 import shutil
 import tempfile
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import HASH_SESSION_KEY, get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
-from dashboard.models import QueryHistory, SavedQuery
-from lessons.models import LessonProgress
 User = get_user_model()
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
 GIF_1X1 = (
@@ -15,6 +12,10 @@ GIF_1X1 = (
     b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00"
     b"\x00\x02\x02D\x01\x00;"
 )
+from django.contrib.auth import get_user_model
+from accounts.decorators import INACTIVE_ACCOUNT_MESSAGE
+from dashboard.models import QueryHistory, SavedQuery
+from lessons.models import LessonProgress
 from django.db import IntegrityError, connection, transaction
 from django.test import Client, TestCase, override_settings
 from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
@@ -347,6 +348,160 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+class PasswordChangeTests(TestCase):
+    def setUp(self):
+        self.change_url = reverse("password_change")
+        self.user = User.objects.create_user(
+            username="jamuel",
+            email="jamuel@example.com",
+            password="Str0ngPass!234",
+            first_name="Jamuel",
+            last_name="Bacus",
+        )
+        self.client.force_login(self.user)
+
+    def test_valid_password_change_updates_the_password(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "An0ther!Pass456",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("An0ther!Pass456"))
+        self.assertFalse(self.user.check_password("Str0ngPass!234"))
+
+    def test_wrong_current_password_is_rejected(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "WrongCurrent!1",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "An0ther!Pass456",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("old_password", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Str0ngPass!234"))
+
+    def test_weak_new_password_is_rejected(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "123456789",
+                "new_password2": "123456789",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertIn("new_password2", form.errors)
+        self.assertTrue(
+            any(
+                "entirely numeric" in message
+                for message in form.errors["new_password2"]
+            ),
+            form.errors["new_password2"],
+        )
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Str0ngPass!234"))
+
+    def test_new_password_confirmation_must_match(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "D1fferent!Pass789",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("new_password2", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Str0ngPass!234"))
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        self.client.logout()
+
+        response = self.client.get(self.change_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
+
+    def test_profile_page_links_to_password_change(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("password_change"))
+        self.assertContains(response, "Change Password")
+
+    def test_get_password_change_page_renders_the_form(self):
+        response = self.client.get(self.change_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/password_change.html")
+        self.assertContains(response, "old_password")
+        self.assertContains(response, "new_password1")
+        self.assertContains(response, "new_password2")
+
+    def test_session_stays_authenticated_after_password_change(self):
+        original_hash = self.client.session[HASH_SESSION_KEY]
+
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "An0ther!Pass456",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.assertNotEqual(self.client.session[HASH_SESSION_KEY], original_hash)
+        self.assertEqual(self.client.get(reverse("profile")).status_code, 200)
+
+    def test_anonymous_user_cannot_post_a_password_change(self):
+        self.client.logout()
+
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "An0ther!Pass456",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(reverse("login")))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Str0ngPass!234"))
+
+    def test_successful_change_shows_a_confirmation_message(self):
+        response = self.client.post(
+            self.change_url,
+            {
+                "old_password": "Str0ngPass!234",
+                "new_password1": "An0ther!Pass456",
+                "new_password2": "An0ther!Pass456",
+            },
+        )
+
+        self.assertRedirects(
+            response, reverse("profile"), fetch_redirect_response=False
+        )
+        self.assertContains(
+            self.client.get(reverse("profile")),
+            "Your password was changed successfully.",
+        )
 
 class InactiveSessionAccessTests(TestCase):
     def setUp(self):
