@@ -14,6 +14,7 @@ class AdminUserCreateForm(UserCreationForm):
             "first_name",
             "last_name",
             "email",
+            "contact_number",
             "role",
             "is_active",
         )
@@ -24,6 +25,9 @@ class AdminUserCreateForm(UserCreationForm):
             "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+            "contact_number": forms.TextInput(
+                attrs={"placeholder": "+639171234567", "autocomplete": "tel"}
+            ),
         }
 
     def __init__(self, *args, **kwargs):
@@ -44,6 +48,7 @@ class AdminUserEditForm(forms.ModelForm):
             "first_name",
             "last_name",
             "email",
+            "contact_number",
             "role",
             "is_active",
         )
@@ -52,6 +57,9 @@ class AdminUserEditForm(forms.ModelForm):
             "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+            "contact_number": forms.TextInput(
+                attrs={"placeholder": "+639171234567", "autocomplete": "tel"}
+            ),
         }
 
     def __init__(self, *args, **kwargs):

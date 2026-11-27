@@ -137,14 +137,20 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = CustomUser
-        fields = ("first_name", "last_name", "email", "profile_photo")
+        fields = ("first_name", "last_name", "email", "contact_number", "profile_photo")
         widgets = {
             "first_name": forms.TextInput(attrs={"placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"placeholder": "Last name"}),
             "email": forms.EmailInput(attrs={"placeholder": "you@example.com"}),
+            "contact_number": forms.TextInput(
+                attrs={"placeholder": "+639171234567", "autocomplete": "tel"}
+            ),
             "profile_photo": forms.ClearableFileInput(attrs={"accept": "image/*"}),
         }
-        labels = {"profile_photo": "Profile photo"}
+        labels = {
+            "profile_photo": "Profile photo",
+            "contact_number": "Contact number",
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

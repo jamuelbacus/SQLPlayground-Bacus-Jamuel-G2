@@ -6,6 +6,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from accounts.forms import ProfileForm
+
 User = get_user_model()
 
 # A valid 1x1 transparent GIF, used to test profile photo uploads.
@@ -346,3 +348,83 @@ class ProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.startswith(reverse("login")))
+
+
+class ContactNumberValidationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="jamuel",
+            email="jamuel@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.user)
+
+    def test_profile_form_saves_a_valid_contact_number(self):
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+            },
+            instance=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().contact_number, "+639171234567")
+
+    def test_profile_form_rejects_an_invalid_contact_number(self):
+        form = ProfileForm(
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "abc123",
+            },
+            instance=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(
+            form.errors["contact_number"],
+            ["Enter a valid contact number (7-15 digits, optional leading +)."],
+        )
+
+    def test_profile_view_rejects_invalid_contact_number_without_saving(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("contact_number", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.contact_number, "")
+
+    def test_profile_update_ignores_privilege_fields(self):
+        response = self.client.post(
+            reverse("profile_edit"),
+            {
+                "first_name": "Jamuel",
+                "last_name": "Bacus",
+                "email": "jamuel@example.com",
+                "contact_number": "+639171234567",
+                "role": User.Role.ADMINISTRATOR,
+                "is_staff": "on",
+                "is_superuser": "on",
+                "is_active": "",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.role, User.Role.LEARNER)
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
+        self.assertTrue(self.user.is_active)
+        self.assertEqual(self.user.contact_number, "+639171234567")

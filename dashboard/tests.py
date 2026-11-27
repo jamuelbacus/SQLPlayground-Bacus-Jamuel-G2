@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from dashboard.forms import AdminUserCreateForm, AdminUserEditForm
+
 User = get_user_model()
 
 
@@ -293,3 +295,62 @@ class UserManagementTests(TestCase):
 
         self.assertRedirects(response, reverse("manage_users"))
         self.assertTrue(User.objects.filter(pk=self.administrator.pk).exists())
+
+
+class AdminContactNumberFormTests(TestCase):
+    CONTACT_ERROR = "Enter a valid contact number (7-15 digits, optional leading +)."
+
+    def setUp(self):
+        self.target = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.create_data = {
+            "username": "newuser",
+            "first_name": "New",
+            "last_name": "User",
+            "email": "newuser@example.com",
+            "contact_number": "+639171234567",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+            "password1": "Str0ngPass!234",
+            "password2": "Str0ngPass!234",
+        }
+        self.edit_data = {
+            "username": "learner1",
+            "first_name": "Learner",
+            "last_name": "One",
+            "email": "learner1@example.com",
+            "contact_number": "+639171234567",
+            "role": User.Role.LEARNER,
+            "is_active": "on",
+        }
+
+    def test_create_form_accepts_a_valid_contact_number(self):
+        form = AdminUserCreateForm(self.create_data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["contact_number"], "+639171234567")
+
+    def test_create_form_rejects_an_invalid_contact_number(self):
+        form = AdminUserCreateForm(
+            {**self.create_data, "contact_number": "abc123"}
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors["contact_number"], [self.CONTACT_ERROR])
+
+    def test_edit_form_accepts_a_valid_contact_number(self):
+        form = AdminUserEditForm(self.edit_data, instance=self.target)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().contact_number, "+639171234567")
+
+    def test_edit_form_rejects_an_invalid_contact_number(self):
+        form = AdminUserEditForm(
+            {**self.edit_data, "contact_number": "123"}, instance=self.target
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors["contact_number"], [self.CONTACT_ERROR])
