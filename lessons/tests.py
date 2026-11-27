@@ -1,3 +1,5 @@
+import sqlite3
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -8,6 +10,7 @@ from django.utils.html import escape
 from django.utils import timezone
 from .curriculum import LESSONS, LESSONS_BY_SLUG, lessons_for_level, next_lesson
 from .engine import (
+    _authorizer,
     MAX_ROWS,
     QueryError,
     QueryResult,
@@ -115,6 +118,68 @@ class RunQueryTests(SimpleTestCase):
     def test_database_error_is_reported(self):
         with self.assertRaisesMessage(QueryError, "SQL error"):
             run_query("SELECT missing_column FROM students")
+
+    def test_disallowed_function_is_denied(self):
+        with self.assertRaisesMessage(QueryError, "not authorized"):
+            run_query("SELECT sqlite_version()")
+
+    def test_lesson_aggregate_functions_remain_available(self):
+        result = run_query(
+            "SELECT COUNT(*), SUM(credits) FROM courses"
+        )
+
+        self.assertEqual(result.rows, [(5, 15)])
+
+    def test_like_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name LIKE 'A%'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_glob_operator_still_works(self):
+        result = run_query(
+            "SELECT first_name FROM students WHERE first_name GLOB 'A*'"
+        )
+
+        self.assertEqual(result.rows, [("Alice",)])
+
+    def test_attach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("ATTACH DATABASE ':memory:' AS other")
+
+    def test_detach_statement_is_rejected(self):
+        with self.assertRaises(QueryError):
+            run_query("DETACH DATABASE other")
+
+    def test_progress_handler_does_not_interrupt_single_function_call(self):
+        """SQLite checks progress between VM steps, not inside a function call.
+
+        This is why the function allowlist matters: one expensive C-level
+        helper would keep running even after the guard would trip.
+        """
+        connection = sqlite3.connect(":memory:")
+        progress_calls = []
+
+        def observe_progress():
+            progress_calls.append(1)
+            return 0
+
+        def long_call():
+            calls_before = len(progress_calls)
+            deadline = time.monotonic() + 0.01
+            while time.monotonic() < deadline:
+                pass
+            self.assertEqual(len(progress_calls), calls_before)
+            return "done"
+
+        connection.create_function("long_call", 0, long_call)
+        connection.set_progress_handler(observe_progress, 1)
+
+        self.assertEqual(
+            connection.execute("SELECT long_call()").fetchone(), ("done",)
+        )
+        self.assertTrue(progress_calls)
 
 class ResultsMatchTests(SimpleTestCase):
     def test_ordered_results_must_match_sequence(self):
@@ -411,6 +476,31 @@ class LessonViewTests(TestCase):
         )
         self.assertEqual(progress.attempts, 1)
         self.assertIsNone(progress.completed_at)
+
+class AuthorizerTests(SimpleTestCase):
+    def test_attach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_ATTACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
+
+    def test_detach_action_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_DETACH, None, None, "other", None),
+            sqlite3.SQLITE_DENY,
+        )
+
+    def test_function_names_are_matched_case_insensitively(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_FUNCTION, None, "COUNT", None, None),
+            sqlite3.SQLITE_OK,
+        )
+
+    def test_missing_function_name_is_denied(self):
+        self.assertEqual(
+            _authorizer(sqlite3.SQLITE_FUNCTION, None, None, None, None),
+            sqlite3.SQLITE_DENY,
+        )
 
 class LessonCheckCsrfTests(TestCase):
     def setUp(self):

@@ -133,8 +133,54 @@ _ALLOWED_ACTIONS = {
 if hasattr(sqlite3, "SQLITE_RECURSIVE"):
     _ALLOWED_ACTIONS.add(sqlite3.SQLITE_RECURSIVE)
 
+_ALLOWED_FUNCTIONS = frozenset(
+    {
+        "abs",
+        "avg",
+        "coalesce",
+        "count",
+        "glob",
+        "group_concat",
+        "ifnull",
+        "instr",
+        "length",
+        "like",
+        "lower",
+        "ltrim",
+        "max",
+        "min",
+        "nullif",
+        "printf",
+        "replace",
+        "round",
+        "rtrim",
+        "substr",
+        "sum",
+        "total",
+        "trim",
+        "typeof",
+        "upper",
+    }
+)
+
+_DENIED_ACTIONS = frozenset(
+    {
+        sqlite3.SQLITE_ATTACH,
+        sqlite3.SQLITE_DETACH,
+    }
+)
+
 
 def _authorizer(action, arg1, arg2, dbname, trigger):
+    if action in _DENIED_ACTIONS:
+        return sqlite3.SQLITE_DENY
+    if action == sqlite3.SQLITE_FUNCTION:
+        name = (arg2 or "").lower()
+        return (
+            sqlite3.SQLITE_OK
+            if name in _ALLOWED_FUNCTIONS
+            else sqlite3.SQLITE_DENY
+        )
     return sqlite3.SQLITE_OK if action in _ALLOWED_ACTIONS else sqlite3.SQLITE_DENY
 
 
@@ -268,6 +314,10 @@ def run_query(sql: str) -> QueryResult:
                 return 1
             return 0
 
+        # The progress handler runs between SQLite VM steps, so it cannot stop
+        # work performed inside a single C-level function call. The authorizer's
+        # function allowlist is what keeps expensive helpers (readfile,
+        # writefile, randomblob, zeroblob, and future additions) unreachable.
         connection.set_progress_handler(guard, 1000)
 
         try:
