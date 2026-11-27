@@ -3,7 +3,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AdminPasswordChangeForm
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -17,6 +17,15 @@ from .forms import AdminUserCreateForm, AdminUserEditForm
 from .models import QueryHistory, SavedQuery
 
 DEFAULT_SQL = "SELECT * FROM students ORDER BY student_id;"
+DUPLICATE_TITLE_MESSAGE = "A saved query with this title already exists."
+
+
+def saved_query_title_exists(user, title, exclude_pk=None):
+    """Return whether the user already owns a query with this title."""
+    queryset = SavedQuery.objects.filter(user=user, title__iexact=title)
+    if exclude_pk is not None:
+        queryset = queryset.exclude(pk=exclude_pk)
+    return queryset.exists()
 
 
 @login_required
@@ -150,13 +159,20 @@ def saved_query_create(request):
         if not title:
             messages.error(request, "A title is required for saving a query.")
             return redirect("saved_query_list")
-        with transaction.atomic():
-            saved_query = SavedQuery.objects.create(
-                user=request.user, title=title, sql=sql
-            )
-            messages.success(
-                request, f"Saved query '{saved_query.title}' was created."
-            )
+        if saved_query_title_exists(request.user, title):
+            messages.error(request, DUPLICATE_TITLE_MESSAGE)
+            return redirect("saved_query_list")
+        try:
+            with transaction.atomic():
+                saved_query = SavedQuery.objects.create(
+                    user=request.user, title=title, sql=sql
+                )
+                messages.success(
+                    request, f"Saved query '{saved_query.title}' was created."
+                )
+        except IntegrityError:
+            messages.error(request, DUPLICATE_TITLE_MESSAGE)
+            return redirect("saved_query_list")
         return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
@@ -180,13 +196,22 @@ def saved_query_edit(request, pk):
         saved_query.sql = (request.POST.get("sql") or "").strip()
         if not saved_query.title:
             messages.error(request, "A title is required for saving a query.")
+        elif saved_query_title_exists(
+            request.user, saved_query.title, exclude_pk=saved_query.pk
+        ):
+            messages.error(request, DUPLICATE_TITLE_MESSAGE)
         else:
-            with transaction.atomic():
-                saved_query.save()
-                messages.success(
-                    request, f"Saved query '{saved_query.title}' was updated."
-                )
-            return redirect("saved_query_detail", pk=saved_query.pk)
+            try:
+                with transaction.atomic():
+                    saved_query.save()
+                    messages.success(
+                        request, f"Saved query '{saved_query.title}' was updated."
+                    )
+            except IntegrityError:
+                saved_query.refresh_from_db()
+                messages.error(request, DUPLICATE_TITLE_MESSAGE)
+            else:
+                return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
         request,

@@ -6,7 +6,17 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sqlplayground.settings')
+    test_command = len(sys.argv) > 1 and sys.argv[1] == "test"
+    explicit_option = any(
+        arg == "--settings" or arg.startswith("--settings=") for arg in sys.argv
+    )
+    existing_environment = os.environ.get("DJANGO_SETTINGS_MODULE")
+
+    if not explicit_option and not existing_environment:
+        if test_command:
+            os.environ["DJANGO_SETTINGS_MODULE"] = "sqlplayground.settings_test"
+        else:
+            os.environ["DJANGO_SETTINGS_MODULE"] = "sqlplayground.settings"
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
