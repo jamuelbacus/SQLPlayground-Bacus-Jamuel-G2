@@ -3,6 +3,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 
 from accounts.models import CustomUser
+from lessons.engine import QueryError, validate_read_only_sql
 
 
 class AdminUserCreateForm(UserCreationForm):
@@ -94,3 +95,17 @@ class AdminUserEditForm(forms.ModelForm):
                 "An account with this email address already exists."
             )
         return email
+
+
+class SqlSubmissionForm(forms.Form):
+    """Apply the practice engine's SQL rules to user-submitted SQL."""
+
+    sql = forms.CharField(strip=True)
+
+    def clean_sql(self):
+        sql = self.cleaned_data["sql"]
+        try:
+            validate_read_only_sql(sql)
+        except QueryError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+        return sql
