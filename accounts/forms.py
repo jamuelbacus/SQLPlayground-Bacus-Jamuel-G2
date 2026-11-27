@@ -1,8 +1,29 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import UploadedFile
+from PIL import Image
 
 from .models import CustomUser
+
+MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+MAX_PROFILE_PHOTO_DIMENSION = 2000
+
+
+def validate_profile_photo(photo):
+    """Apply the application's explicit profile-photo limits to new uploads."""
+    if not isinstance(photo, UploadedFile):
+        return photo
+    if photo.size > MAX_PROFILE_PHOTO_BYTES:
+        raise ValidationError("Profile photo must be 2 MB or smaller.")
+    try:
+        with Image.open(photo) as image:
+            width, height = image.size
+    finally:
+        photo.seek(0)
+    if max(width, height) > MAX_PROFILE_PHOTO_DIMENSION:
+        raise ValidationError("Profile photo dimensions must not exceed 2000 pixels.")
+    return photo
 
 
 class SignUpForm(UserCreationForm):
@@ -166,3 +187,6 @@ class ProfileForm(forms.ModelForm):
         if duplicates.exists():
             raise ValidationError("An account with this email address already exists.")
         return email
+
+    def clean_profile_photo(self):
+        return validate_profile_photo(self.cleaned_data["profile_photo"])
