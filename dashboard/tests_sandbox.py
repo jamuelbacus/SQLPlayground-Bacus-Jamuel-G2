@@ -3,11 +3,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from lessons.tests_engine import AUTHORIZER_REJECTION, CTE_WRITE_STATEMENTS, DIRECT_WRITE_STATEMENTS, STABLE_REJECTION, TRIGGER_SQL
-
 from .models import QueryHistory, SavedQuery
-
 User = get_user_model()
-
+from unittest.mock import patch
+from django.test import Client, TestCase
+from sqlplayground.test_helpers import csrf_token_from_response, post_with_csrf_token
 
 class SandboxAccessTests(TestCase):
     def setUp(self):
@@ -54,7 +54,6 @@ class SandboxAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 301)
         self.assertEqual(response.url, reverse("sandbox"))
-
 
 class SandboxExecutionTests(TestCase):
     def setUp(self):
@@ -124,7 +123,6 @@ class SandboxExecutionTests(TestCase):
 
         self.assertContains(response, "SELECT course_name FROM courses;")
 
-
 class SavedQueryTests(TestCase):
     def setUp(self):
         self.learner = User.objects.create_user(
@@ -143,6 +141,17 @@ class SavedQueryTests(TestCase):
             title="All students",
             sql="SELECT * FROM students;",
         )
+        self.other_saved_query = SavedQuery.objects.create(
+            user=self.other_learner,
+            title="Other query",
+            sql="SELECT * FROM courses;",
+        )
+
+    def assert_other_query_unchanged(self):
+        self.other_saved_query.refresh_from_db()
+        self.assertEqual(self.other_saved_query.title, "Other query")
+        self.assertEqual(self.other_saved_query.sql, "SELECT * FROM courses;")
+        self.assertEqual(SavedQuery.objects.count(), 2)
 
     def test_saved_query_list_is_available_from_the_sandbox(self):
         response = self.client.get(reverse("saved_query_list"))
@@ -177,8 +186,71 @@ class SavedQueryTests(TestCase):
         )
 
         self.assertRedirects(response, reverse("saved_query_list"))
-        self.assertFalse(SavedQuery.objects.exists())
+        self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
 
+    def test_learner_cannot_open_another_learners_saved_query_edit_page(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.get(
+            reverse("saved_query_edit", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_edit_another_learners_saved_query(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.post(
+            reverse("saved_query_edit", args=[self.other_saved_query.pk]),
+            {"title": "Hijacked", "sql": "DELETE FROM students;"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_open_another_learners_saved_query_delete_confirmation(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.get(
+            reverse("saved_query_delete", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_learner_cannot_delete_another_learners_saved_query(self):
+        self.client.force_login(self.learner)
+
+        response = self.client.post(
+            reverse("saved_query_delete", args=[self.other_saved_query.pk])
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assert_other_query_unchanged()
+
+    def test_owner_can_edit_their_saved_query(self):
+        url = reverse("saved_query_edit", args=[self.saved_query.pk])
+
+        response = self.client.post(
+            url,
+            {"title": "Edited students", "sql": "SELECT last_name FROM students;"},
+        )
+
+        self.assertRedirects(
+            response, reverse("saved_query_detail", args=[self.saved_query.pk])
+        )
+        self.saved_query.refresh_from_db()
+        self.assertEqual(self.saved_query.title, "Edited students")
+        self.assertEqual(self.saved_query.sql, "SELECT last_name FROM students;")
+
+    def test_owner_can_delete_their_saved_query(self):
+        response = self.client.post(
+            reverse("saved_query_delete", args=[self.saved_query.pk])
+        )
+
+        self.assertRedirects(response, reverse("saved_query_list"))
+        self.assertFalse(SavedQuery.objects.filter(pk=self.saved_query.pk).exists())
 
 class SandboxWriteRejectionTests(TestCase):
     def setUp(self):
@@ -243,3 +315,80 @@ class SandboxWriteRejectionTests(TestCase):
         self.assertEqual(result["error"], STABLE_REJECTION)
         self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
         self.assertNotContains(response, "<script>alert(1)</script>")
+
+class SandboxCsrfTests(TestCase):
+    def setUp(self):
+        self.client = Client(enforce_csrf_checks=True)
+        self.learner = User.objects.create_user(
+            username="learner1",
+            email="learner1@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+        self.sql = "SELECT first_name FROM students;"
+
+    def test_execute_rejects_post_without_token(self):
+        response = self.client.post(
+            reverse("sandbox_execute"), {"sql": self.sql}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_rejects_invalid_token(self):
+        token = csrf_token_from_response(
+            self.client.get(reverse("sandbox")), reverse("sandbox_execute")
+        )
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": self.sql, "csrfmiddlewaretoken": f"invalid-{token}"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_execute_accepts_valid_token(self):
+        response = post_with_csrf_token(
+            self.client,
+            reverse("sandbox"),
+            reverse("sandbox_execute"),
+            {"sql": self.sql},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        history = QueryHistory.objects.get(user=self.learner)
+        self.assertEqual(history.status, "success")
+        self.assertEqual(QueryHistory.objects.count(), 1)
+
+class SandboxTransactionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="sandbox-tx",
+            email="sandbox-tx@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_history_failure_does_not_store_result_in_session(self):
+        with patch(
+            "dashboard.views.QueryHistory.objects.create",
+            side_effect=RuntimeError("boom"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("sandbox_execute"),
+                    {"sql": "SELECT first_name FROM students;"},
+                )
+
+        self.assertNotIn("sandbox_result", self.client.session)
+        self.assertFalse(QueryHistory.objects.exists())
+
+    def test_successful_execute_redirects_and_get_does_not_repeat(self):
+        response = self.client.post(
+            reverse("sandbox_execute"),
+            {"sql": "SELECT first_name FROM students;"},
+        )
+
+        self.assertRedirects(response, reverse("sandbox"))
+        self.client.get(reverse("sandbox"))
+        self.assertEqual(QueryHistory.objects.count(), 1)
