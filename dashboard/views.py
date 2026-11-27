@@ -105,12 +105,13 @@ def sandbox_execute(request):
     try:
         result = run_query(sql)
     except QueryError as exc:
-        QueryHistory.objects.create(
-            user=request.user,
-            sql=sql,
-            status="error",
-            error_message=str(exc),
-        )
+        with transaction.atomic():
+            QueryHistory.objects.create(
+                user=request.user,
+                sql=sql,
+                status="error",
+                error_message=str(exc),
+            )
         request.session["sandbox_result"] = {
             "success": False,
             "columns": [],
@@ -122,12 +123,13 @@ def sandbox_execute(request):
         }
         return redirect("sandbox")
 
-    QueryHistory.objects.create(
-        user=request.user,
-        sql=sql,
-        status="success",
-        row_count=len(result.rows),
-    )
+    with transaction.atomic():
+        QueryHistory.objects.create(
+            user=request.user,
+            sql=sql,
+            status="success",
+            row_count=len(result.rows),
+        )
     request.session["sandbox_result"] = {
         "success": True,
         "columns": result.columns,
@@ -165,10 +167,12 @@ def saved_query_create(request):
                 saved_query = SavedQuery.objects.create(
                     user=request.user, title=title, sql=sql
                 )
+                messages.success(
+                    request, f"Saved query '{saved_query.title}' was created."
+                )
         except IntegrityError:
             messages.error(request, DUPLICATE_TITLE_MESSAGE)
             return redirect("saved_query_list")
-        messages.success(request, f"Saved query '{saved_query.title}' was created.")
         return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
@@ -200,13 +204,13 @@ def saved_query_edit(request, pk):
             try:
                 with transaction.atomic():
                     saved_query.save()
+                    messages.success(
+                        request, f"Saved query '{saved_query.title}' was updated."
+                    )
             except IntegrityError:
                 saved_query.refresh_from_db()
                 messages.error(request, DUPLICATE_TITLE_MESSAGE)
             else:
-                messages.success(
-                    request, f"Saved query '{saved_query.title}' was updated."
-                )
                 return redirect("saved_query_detail", pk=saved_query.pk)
 
     return render(
@@ -302,16 +306,44 @@ def user_create(request):
     )
 
 
-def _is_last_active_administrator(account):
+def _locked_active_administrators():
+    """Return active administrators locked in a stable order.
+
+    PostgreSQL serializes concurrent guard checks when these rows are read
+    with ``FOR UPDATE``; the primary-key ordering avoids lock-order deadlocks.
+    """
+    return (
+        CustomUser.objects.filter(
+            role=CustomUser.Role.ADMINISTRATOR,
+            is_active=True,
+        )
+        .order_by("pk")
+        .select_for_update()
+    )
+
+
+def _is_last_active_administrator(account, active_administrators=None):
     if not account.is_administrator or not account.is_active:
         return False
-    return not (
-        CustomUser.objects.filter(
-            role=CustomUser.Role.ADMINISTRATOR, is_active=True
-        )
-        .exclude(pk=account.pk)
-        .exists()
+    if active_administrators is None:
+        active_administrators = _locked_active_administrators()
+    return (
+        any(admin.pk == account.pk for admin in active_administrators)
+        and not any(admin.pk != account.pk for admin in active_administrators)
     )
+
+
+def _locked_target(target, active_administrators):
+    """Re-read the target under lock so the guard uses committed state."""
+    locked_target = next(
+        (admin for admin in active_administrators if admin.pk == target.pk),
+        None,
+    )
+    if locked_target is None:
+        locked_target = get_object_or_404(
+            CustomUser.objects.select_for_update(), pk=target.pk
+        )
+    return locked_target
 
 
 @role_required(CustomUser.Role.ADMINISTRATOR)
@@ -330,18 +362,26 @@ def user_edit(request, pk):
         if form.is_valid():
             new_role = form.cleaned_data["role"]
             new_active = form.cleaned_data["is_active"]
-            removes_last_admin = (
-                target.is_administrator
-                and (new_role != CustomUser.Role.ADMINISTRATOR or not new_active)
-                and _is_last_active_administrator(target)
-            )
-            if removes_last_admin:
-                form.add_error(
-                    None, "At least one active administrator must remain."
+            with transaction.atomic():
+                active_administrators = list(_locked_active_administrators())
+                locked_target = _locked_target(target, active_administrators)
+                removes_last_admin = (
+                    locked_target.is_administrator
+                    and (new_role != CustomUser.Role.ADMINISTRATOR or not new_active)
+                    and _is_last_active_administrator(
+                        locked_target, active_administrators
+                    )
                 )
-            else:
-                form.save()
-                messages.success(request, f"Account {target.username} was updated.")
+                if removes_last_admin:
+                    form.add_error(
+                        None, "At least one active administrator must remain."
+                    )
+                else:
+                    form.save()
+                    messages.success(
+                        request, f"Account {target.username} was updated."
+                    )
+            if not removes_last_admin:
                 return redirect("manage_users")
         messages.error(request, "Please correct the errors below.")
     else:
@@ -366,10 +406,13 @@ def user_password(request, pk):
     if request.method == "POST":
         form = AdminPasswordChangeForm(target, request.POST)
         if form.is_valid():
-            form.save()
-            if target.pk == request.user.pk:
-                update_session_auth_hash(request, target)
-            messages.success(request, f"Password for {target.username} was changed.")
+            with transaction.atomic():
+                form.save()
+                if target.pk == request.user.pk:
+                    update_session_auth_hash(request, target)
+                messages.success(
+                    request, f"Password for {target.username} was changed."
+                )
             return redirect("user_edit", pk=target.pk)
         messages.error(request, "Please correct the errors below.")
     else:
@@ -392,14 +435,17 @@ def user_delete(request, pk):
         return redirect("manage_users")
 
     if request.method == "POST":
-        if _is_last_active_administrator(target):
-            messages.error(
-                request, "At least one active administrator must remain."
-            )
-            return redirect("user_delete", pk=target.pk)
-        username = target.username
-        target.delete()
-        messages.success(request, f"Account {username} was deleted.")
+        with transaction.atomic():
+            active_administrators = list(_locked_active_administrators())
+            target = _locked_target(target, active_administrators)
+            if _is_last_active_administrator(target, active_administrators):
+                messages.error(
+                    request, "At least one active administrator must remain."
+                )
+                return redirect("user_delete", pk=target.pk)
+            username = target.username
+            target.delete()
+            messages.success(request, f"Account {username} was deleted.")
         return redirect("manage_users")
 
     return render(

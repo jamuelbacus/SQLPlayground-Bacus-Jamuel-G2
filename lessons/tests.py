@@ -403,6 +403,82 @@ class LessonViewTests(TestCase):
         self.assertIsNone(progress.completed_at)
 
 
+class LessonCheckTransactionTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="transaction-learner",
+            email="transaction-learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_failed_lesson_check_rolls_back_attempt_and_progress(self):
+        with patch(
+            "lessons.views.results_match", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse("lesson_check", args=["select-columns"]),
+                    {"sql": "SELECT 1;"},
+                )
+
+        self.assertFalse(
+            LessonProgress.objects.filter(user=self.learner).exists()
+        )
+
+    def test_successful_post_redirects_and_get_does_not_repeat_attempt(self):
+        url = reverse("lesson_check", args=["select-columns"])
+        response = self.client.post(
+            url, {"sql": "SELECT first_name, last_name FROM students;"}
+        )
+
+        self.assertRedirects(
+            response, reverse("lesson_detail", args=["select-columns"])
+        )
+        self.client.get(reverse("lesson_detail", args=["select-columns"]))
+        progress = LessonProgress.objects.get(
+            user=self.learner, lesson_slug="select-columns"
+        )
+        self.assertEqual(progress.attempts, 1)
+
+
+class LessonCheckConcurrencyTests(TestCase):
+    def setUp(self):
+        self.learner = User.objects.create_user(
+            username="concurrent-learner",
+            email="concurrent-learner@example.com",
+            password="Str0ngPass!234",
+        )
+        self.client.force_login(self.learner)
+
+    def test_concurrent_checks_keep_all_attempts(self):
+        progress = LessonProgress.objects.create(
+            user=self.learner,
+            lesson_slug="select-columns",
+            attempts=1,
+        )
+        stale_progress = LessonProgress.objects.get(pk=progress.pk)
+
+        def concurrent_write(*args, **kwargs):
+            # Another request advances the row after our instance was read.
+            LessonProgress.objects.filter(pk=progress.pk).update(
+                attempts=2, updated_at=timezone.now()
+            )
+            return stale_progress, False
+
+        with patch(
+            "lessons.views.LessonProgress.objects.get_or_create",
+            side_effect=concurrent_write,
+        ):
+            self.client.post(
+                reverse("lesson_check", args=["select-columns"]),
+                {"sql": "SELECT 1;"},
+            )
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.attempts, 3)
+
+
 class LessonProgressIntegrityTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
